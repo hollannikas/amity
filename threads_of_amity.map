@@ -1,0 +1,370 @@
+SUMMARY:
+	ROM0: 5347 bytes used / 11037 free
+	ROMX: 14112 bytes used / 2272 free in 1 bank
+	WRAM0: 218 bytes used / 3878 free
+	HRAM: 16 bytes used / 111 free
+
+ROM0 bank #0:
+	EMPTY: $0000-$003f ($0040 bytes)
+	SECTION: $0040-$0040 ($0001 byte) ["VBlank Interrupt"]
+	EMPTY: $0041-$0047 ($0007 bytes)
+	SECTION: $0048-$0048 ($0001 byte) ["LCD STAT Interrupt"]
+	EMPTY: $0049-$004f ($0007 bytes)
+	SECTION: $0050-$0050 ($0001 byte) ["Timer Interrupt"]
+	EMPTY: $0051-$0057 ($0007 bytes)
+	SECTION: $0058-$0058 ($0001 byte) ["Serial Interrupt"]
+	EMPTY: $0059-$005f ($0007 bytes)
+	SECTION: $0060-$0060 ($0001 byte) ["Joypad Interrupt"]
+	EMPTY: $0061-$00ff ($009f bytes)
+	SECTION: $0100-$014f ($0050 bytes) ["Header"]
+	SECTION: $0150-$15dd ($148e bytes) ["Main"]
+	         $0150 = EntryPoint
+	         $019d = MainLoop
+	         $01c7 = MainLoop.doSplash
+	         $01cc = MainLoop.doCharSelect
+	         $01d1 = MainLoop.doOverworld
+	         $01d6 = MainLoop.doDialogue
+	         $01db = MainLoop.doBattle
+	         $01e0 = MainLoop.doGameOver
+	         $01e5 = InitSplashScreen
+	         $0278 = UpdateSplashScreen
+	         $0283 = UpdateSplashScreen.frame0
+	         $0285 = UpdateSplashScreen.applyAnim
+	         $02d1 = InitCharSelect
+	         $0342 = UpdateCharSelect
+	         $034d = UpdateCharSelect.f0
+	         $034f = UpdateCharSelect.drawSprites
+	         $03bc = UpdateCharSelect.moveDown
+	         $03ca = UpdateCharSelect.moveUp
+	         $03d7 = UpdateCharSelect.decSel
+	         $03d8 = UpdateCharSelect.storeSel
+	         $03df = UpdateCharSelect.confirmChar
+	         $03e6 = ClearSelectDescLine
+	         $03e8 = ClearSelectDescLine.csdLoop
+	         $03f5 = DrawCharSelectDetails
+	         $03fb = DrawCharSelectDetails.waitNotVBlank
+	         $0405 = DrawCharSelectDetails.lcdOffReady
+	         $043e = DrawCharSelectDetails.male
+	         $045a = DrawCharSelectDetails.female
+	         $0476 = InitOverworld
+	         $04b8 = InitOverworld.initStatsM
+	         $04cc = InitOverworld.initStatsF
+	         $04de = InitOverworld.doneStatsInit
+	         $0507 = InitOverworld.initAliveLoop
+	         $050f = InitialEnemyX
+	         $0518 = InitialEnemyY
+	         $0521 = EnterOverworldMap
+	         $0556 = LoadSelectedPlayerSprites
+	         $0566 = LoadSelectedPlayerSprites.loadSprAria
+	         $056b = LoadSelectedPlayerSprites.loadSprSakura
+	         $056e = LoadSelectedPlayerSprites.copySpr
+	         $0578 = LoadOverworldMap
+	         $0580 = LoadOverworldMap.rowLoop
+	         $0583 = LoadOverworldMap.colLoop
+	         $05a9 = UpdateOverworld
+	         $05cc = UpdateOverworld.notRight
+	         $05e5 = UpdateOverworld.notLeft
+	         $05f0 = UpdateOverworld.xOk
+	         $0608 = UpdateOverworld.notDown
+	         $0621 = UpdateOverworld.notUp
+	         $062c = UpdateOverworld.yOk
+	         $0637 = UpdateOverworld.noWalkStep
+	         $0649 = UpdateOverworld.fiendDirSet
+	         $064e = UpdateOverworld.patrolFiendsLoop
+	         $066c = UpdateOverworld.terfLeft
+	         $0670 = UpdateOverworld.skipEnemyPatrol
+	         $0683 = CheckNPCInteraction
+	         $068f = CheckNPCInteraction.absXOk
+	         $069e = CheckNPCInteraction.absYOk
+	         $06ad = CheckNPCInteraction.touchCheckX
+	         $06b9 = CheckNPCInteraction.absX2
+	         $06c5 = CheckNPCInteraction.PushBackAndTalk
+	         $06cd = CheckNPCInteraction.triggerDialogue
+	         $06d4 = InitNPCDialogue
+	         $06ef = InitNPCDialogue.pRowLoop
+	         $06f2 = InitNPCDialogue.pColLoop
+	         $071e = LoadPlayerPortraitTiles
+	         $072e = LoadPlayerPortraitTiles.loadAria
+	         $0733 = LoadPlayerPortraitTiles.loadSakura
+	         $0736 = LoadPlayerPortraitTiles.doCopyPortrait
+	         $0740 = DrawNPCDialoguePage
+	         $07c3 = DrawNPCDialoguePage.dialogAria
+	         $080c = DrawNPCDialoguePage.dialogSakura
+	         $0843 = DrawNPCDialoguePage.page1
+	         $087e = DrawNPCDialoguePage.pageTerf
+	         $08a3 = ClearDialogLine
+	         $08a6 = ClearDialogLine.clLoop
+	         $08ab = UpdateNPCDialogue
+	         $08c7 = UpdateNPCDialogue.hidePrompt
+	         $08cb = UpdateNPCDialogue.checkBtn
+	         $08eb = UpdateNPCDialogue.respawnFiendsLoop
+	         $090a = UpdateNPCDialogue.startTerfBattleFromDialog
+	         $090e = UpdateNPCDialogue.closeDialog
+	         $0912 = InitTerfTauntDialogue
+	         $092f = InitTerfTauntDialogue.tRowLoop
+	         $0932 = InitTerfTauntDialogue.tColLoop
+	         $0967 = CheckEnemyEncounter
+	         $0969 = CheckEnemyEncounter.loopCheckEnemy
+	         $0981 = CheckEnemyEncounter.absXOk
+	         $0993 = CheckEnemyEncounter.absYOk
+	         $09a2 = CheckEnemyEncounter.touchedBossTerf
+	         $09a9 = CheckEnemyEncounter.nextEnemy
+	         $09b0 = StartBattleTransition
+	         $09b5 = StartBattleTransition.flashLoop
+	         $09d0 = WaitFramesB
+	         $09d7 = InitBattle
+	         $0a10 = InitBattle.setupEvilTerf
+	         $0a2b = InitBattle.drawBattleArena
+	         $0a44 = InitBattle.nameTerf
+	         $0a47 = InitBattle.printEnemyTitle
+	         $0a57 = InitBattle.mRow
+	         $0a5a = InitBattle.mCol
+	         $0a6b = InitBattle.drawLargeTerfArena
+	         $0a72 = InitBattle.tArenaRow
+	         $0a75 = InitBattle.tArenaCol
+	         $0a84 = InitBattle.drawBattleHeroSprite
+	         $0ab0 = InitBattle.msgTerfAppear
+	         $0ab3 = InitBattle.printAppearMsg
+	         $0ac1 = DrawBattleHUD
+	         $0b0a = DrawBattleHUD.hudM
+	         $0b0f = DrawBattleHUD.hudF
+	         $0b12 = DrawBattleHUD.printHudHero
+	         $0b9d = PrintNumber2Digit
+	         $0b9f = PrintNumber2Digit.div10
+	         $0ba8 = PrintNumber2Digit.doneDiv
+	         $0bb2 = DrawBattleMessage
+	         $0bc1 = UpdateBattle
+	         $0bf5 = UpdateBattle.cmdDown
+	         $0c01 = UpdateBattle.setCmdCur
+	         $0c05 = UpdateBattle.cmdUp
+	         $0c12 = UpdateBattle.decCmdCur
+	         $0c15 = UpdateBattle.executeCmd
+	         $0c2f = UpdateBattle.doFight
+	         $0c3e = UpdateBattle.minDmgFight
+	         $0c40 = UpdateBattle.gotFightDmg
+	         $0c4b = UpdateBattle.storeMHP1
+	         $0c65 = UpdateBattle.doMagic
+	         $0c78 = UpdateBattle.minDmgMagic
+	         $0c7a = UpdateBattle.gotMagicDmg
+	         $0c85 = UpdateBattle.storeMHP2
+	         $0c9d = UpdateBattle.afterPlayerAttack
+	         $0cba = UpdateBattle.minEnemyDmg
+	         $0cbc = UpdateBattle.gotEnemyDmg
+	         $0cd3 = UpdateBattle.msgTerfHit
+	         $0cd6 = UpdateBattle.drawEnemyHitMsg
+	         $0cf8 = UpdateBattle.heroZeroHP
+	         $0d0b = UpdateBattle.monsterDefeated
+	         $0d1c = UpdateBattle.xpTerf
+	         $0d1e = UpdateBattle.addXP
+	         $0d2c = UpdateBattle.storeXP
+	         $0d38 = UpdateBattle.doLevelUp
+	         $0d8a = UpdateBattle.noLevelUp
+	         $0da5 = UpdateBattle.waitVictoryExit
+	         $0dbe = PlaySFXLevelUp
+	         $0dd8 = InitGameOver
+	         $0e30 = UpdateGameOver
+	         $0e3d = PlaySFXGameOver
+	         $0e57 = FlashMonsterHit
+	         $0e67 = PlaySFXEncounter
+	         $0e81 = PlaySFXAttack
+	         $0e96 = PlaySFXHit
+	         $0eab = CheckMapCollision
+	         $0ecc = CheckMapCollision.passable
+	         $0ece = UpdateCameraScroll
+	         $0ed8 = UpdateCameraScroll.checkMaxX
+	         $0ede = UpdateCameraScroll.setCamX
+	         $0eee = UpdateCameraScroll.checkMaxY
+	         $0ef4 = UpdateCameraScroll.setCamY
+	         $0efb = RenderOverworldSprites
+	         $0f1c = RenderOverworldSprites.setPlayerSprite
+	         $0f6a = RenderOverworldSprites.renderEnemies
+	         $0f6e = RenderOverworldSprites.enemyLoop
+	         $0fab = RenderOverworldSprites.useTerfTile
+	         $0fad = RenderOverworldSprites.setEnemyTile
+	         $0fc0 = RenderOverworldSprites.skipThisEnemy
+	         $0fc1 = RenderOverworldSprites.nextEnemySlot
+	         $0fc8 = OverworldMapData
+	         $10c8 = PlaySFXCursor
+	         $10e2 = PlaySFXConfirm
+	         $10fc = WaitVBlank
+	         $1104 = DisableLCD
+	         $1111 = CopyData
+	         $111a = ClearBGMap0
+	         $1120 = ClearBGMap0.loop
+	         $1128 = ClearShadowOAM
+	         $112e = ClearShadowOAM.loop
+	         $1133 = SetMetaSprite16x16
+	         $1182 = DrawDialogBox
+	         $119b = DrawDialogBox.topLoop
+	         $11ab = DrawDialogBox.midRowLoop
+	         $11b4 = DrawDialogBox.midColLoop
+	         $11ce = DrawDialogBox.botLoop
+	         $11d6 = PrintString
+	         $11d6 = PrintString.waitVRAM
+	         $11e4 = ReadJoypad
+	         $1228 = InitDMARoutine
+	         $1235 = DMARoutineROM
+	         $123c = DMARoutineROM.wait
+	         $1240 = StrSplashTitle1
+	         $1240 = DMARoutineROMEnd
+	         $124f = StrSplashTitle2
+	         $125d = StrSplashTitle3
+	         $126b = StrPressStart
+	         $1278 = StrCopyright
+	         $1287 = StrSelectHeader1
+	         $1298 = StrSelectHeader2
+	         $12a9 = StrOptMale
+	         $12b2 = StrOptFemale
+	         $12bd = StrOptNB
+	         $12c7 = StrDescM1
+	         $12d9 = StrDescM2
+	         $12eb = StrDescM3
+	         $12fc = StrDescF1
+	         $130e = StrDescF2
+	         $1320 = StrDescF3
+	         $1331 = StrDescNB1
+	         $1343 = StrDescNB2
+	         $1355 = StrDescNB3
+	         $1366 = StrReady1
+	         $1375 = StrReady2
+	         $1385 = StrHeaderAriaJP
+	         $138b = StrHeaderAriaEN
+	         $1390 = StrAriaL1
+	         $1399 = StrAriaL2
+	         $13a5 = StrAriaL3
+	         $13ae = StrAriaL4
+	         $13b7 = StrAriaL5
+	         $13be = StrAriaL6
+	         $13c8 = StrHeaderSakuraJP
+	         $13ce = StrHeaderSakuraEN
+	         $13d5 = StrSakuraL1
+	         $13dd = StrSakuraL2
+	         $13e9 = StrSakuraL3
+	         $13f6 = StrSakuraL4
+	         $1404 = StrHeaderOrionJP
+	         $140b = StrHeaderOrionEN
+	         $1411 = StrOrionL1
+	         $141b = StrOrionL2
+	         $1423 = StrOrionL3
+	         $142d = StrOrionL4
+	         $1438 = StrOrionL5
+	         $143f = StrHeaderGaiusJP
+	         $1445 = StrHeaderGaiusEN
+	         $144b = StrNPCDialogP2L1
+	         $145d = StrNPCDialogP2L2
+	         $146d = StrNPCDialogP2L3
+	         $147f = StrNPCDialogP2L4
+	         $1490 = StrTerfDialogL1
+	         $149c = StrTerfDialogL2
+	         $14af = StrTerfDialogL3
+	         $14c2 = StrTerfDialogL4
+	         $14d2 = StrEnemyName
+	         $14e3 = StrTerfName
+	         $14f4 = StrHPLabel
+	         $14f8 = StrATKLabel
+	         $14fc = StrDEFLabel
+	         $1500 = StrLVLabel
+	         $1504 = StrXPLabel
+	         $1508 = StrNextLabel
+	         $150c = StrCmdFight
+	         $1512 = StrCmdMagic
+	         $151d = StrCmdRun
+	         $1521 = StrBattleAppear
+	         $1530 = StrTerfAppear
+	         $1541 = StrBattleSlash
+	         $1552 = StrBattleMagic
+	         $1563 = StrFiendAttackMsg
+	         $1574 = StrTerfAttackMsg
+	         $1585 = StrBattleVictory
+	         $1596 = StrBattleLevelUp
+	         $15a7 = StrGameOverTitle
+	         $15b5 = StrGameOverSub1
+	         $15c1 = StrGameOverSub2
+	         $15cf = StrGameOverRetry
+	EMPTY: $15de-$3fff ($2a22 bytes)
+	TOTAL EMPTY: $2b1d bytes
+
+ROMX bank #1:
+	SECTION: $4000-$771f ($3720 bytes) ["Assets"]
+	         $4000 = TilesetData
+	         $5000 = PortraitAriaTiles
+	         $5000 = TilesetDataEnd
+	         $5500 = PortraitSakuraTiles
+	         $5500 = PortraitAriaTilesEnd
+	         $5a00 = PortraitOrionTiles
+	         $5a00 = PortraitSakuraTilesEnd
+	         $5f00 = PortraitGaiusTiles
+	         $5f00 = PortraitMateriaTiles
+	         $5f00 = PortraitOrionTilesEnd
+	         $6400 = PortraitTerfTiles
+	         $6400 = PortraitMateriaTilesEnd
+	         $6400 = PortraitGaiusTilesEnd
+	         $6900 = SpritesAriaTiles
+	         $6900 = PortraitTerfTilesEnd
+	         $6b00 = SpritesSakuraTiles
+	         $6b00 = SpritesAriaTilesEnd
+	         $6d00 = SpritesOrionTiles
+	         $6d00 = SpritesSakuraTilesEnd
+	         $6f00 = SelectScreenHeroSprites
+	         $6f00 = SpritesOrionTilesEnd
+	         $7080 = MapMetatilesData
+	         $7080 = SelectScreenHeroSpritesEnd
+	         $7240 = CustomSpritesTiles
+	         $7240 = MapMetatilesDataEnd
+	         $7280 = BattleFiendTiles
+	         $7280 = CustomSpritesTilesEnd
+	         $7380 = BattleTerfTiles
+	         $7380 = BattleFiendTilesEnd
+	         $7680 = PortraitTilemap
+	         $7680 = BattleTerfTilesEnd
+	         $7720 = PortraitTilemapEnd
+	EMPTY: $7720-$7fff ($08e0 bytes)
+	TOTAL EMPTY: $08e0 bytes
+
+WRAM0 bank #0:
+	SECTION: $c000-$c09f ($00a0 bytes) ["OAM Buffer"]
+	         $c000 = wOAMBuffer
+	EMPTY: $c0a0-$c0ff ($0060 bytes)
+	SECTION: $c100-$c139 ($003a bytes) ["Game Variables"]
+	         $c100 = wGameState
+	         $c101 = wFrameCounter
+	         $c102 = wJoyHeld
+	         $c103 = wJoyPressed
+	         $c104 = wSelectedChar
+	         $c105 = wSpriteY
+	         $c106 = wSpriteX
+	         $c107 = wSpriteTile
+	         $c108 = wPlayerWorldX
+	         $c109 = wPlayerWorldY
+	         $c10a = wPlayerDir
+	         $c10b = wWalkDistance
+	         $c10c = wCameraX
+	         $c10d = wCameraY
+	         $c10e = wNPCWorldX
+	         $c10f = wNPCWorldY
+	         $c110 = wEnemyX
+	         $c119 = wEnemyY
+	         $c122 = wEnemyAlive
+	         $c12b = wActiveEnemyID
+	         $c12c = wDialogPage
+	         $c12d = wBattleCursor
+	         $c12e = wBattlePhase
+	         $c12f = wHeroLevel
+	         $c130 = wHeroXP
+	         $c131 = wHeroNextXP
+	         $c132 = wHeroMaxHP
+	         $c133 = wHeroHP
+	         $c134 = wHeroATK
+	         $c135 = wHeroDEF
+	         $c136 = wMonsterHP
+	         $c137 = wMonsterATK
+	         $c138 = wMonsterDEF
+	         $c139 = wLastDamage
+	EMPTY: $c13a-$cfff ($0ec6 bytes)
+	TOTAL EMPTY: $0f26 bytes
+
+HRAM bank #0:
+	SECTION: $ff80-$ff8f ($0010 bytes) ["HRAM DMA"]
+	         $ff80 = hOAMDMA
+	EMPTY: $ff90-$fffe ($006f bytes)
+	TOTAL EMPTY: $006f bytes

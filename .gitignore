@@ -1,0 +1,14 @@
+# Binaries and build outputs
+*.gb
+*.o
+*.jar
+
+# Python scripts and cache
+*.py
+__pycache__/
+*.py[cod]
+
+# Workspace and IDE files
+*.code-workspace
+.idea/
+.DS_Store
