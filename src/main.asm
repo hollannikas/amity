@@ -95,6 +95,12 @@ EntryPoint:
     call InitSplashScreen
 
 MainLoop:
+    ; If the previous state's update finished before VBlank ended (e.g. Dialogue),
+    ; wait for active display (LY < 144) first so MainLoop runs strictly once per frame (60 Hz)
+.waitFrameEnd:
+    ld a, [rLY]
+    cp 144
+    jr nc, .waitFrameEnd
     call WaitVBlank
     ; Run OAM DMA during VBlank
     call hOAMDMA
@@ -105,6 +111,9 @@ MainLoop:
 
     ; Read Joypad
     call ReadJoypad
+
+    ; Update background music sequencer
+    call UpdateMusic
 
     ; Dispatch based on current Game State
     ld a, [wGameState]
@@ -226,6 +235,8 @@ InitSplashScreen:
     ld a, STATE_SPLASH
     ld [wGameState], a
 
+    call InitIntroMusic
+
     ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
     ret
@@ -340,6 +351,10 @@ InitCharSelect:
 
     ld a, STATE_CHAR_SELECT
     ld [wGameState], a
+
+    ld a, [wMusicPlaying]
+    or a
+    call z, InitIntroMusic
 
     ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
@@ -515,6 +530,7 @@ DrawCharSelectDetails:
 ; Iteration 2: Scrolling 2.5D Overworld Map State
 ; ===========================================================================
 InitOverworld:
+    call InitGameMusic
     call DisableLCD
     call ClearShadowOAM
 
@@ -1936,6 +1952,8 @@ UpdateBattle:
     ret
 
 PlaySFXLevelUp:
+    ld a, 24
+    ld [wSFXLockTimer], a
     ld a, $24 ; Upward arpeggio sweep!
     ld [rNR10], a
     ld a, $80
@@ -1952,6 +1970,7 @@ PlaySFXLevelUp:
 ; Game Over Screen State
 ; ===========================================================================
 InitGameOver:
+    call StopMusic
     call DisableLCD
     call ClearBGMap0
     call ClearShadowOAM
@@ -2031,6 +2050,8 @@ FlashMonsterHit:
     ret
 
 PlaySFXEncounter:
+    ld a, 20
+    ld [wSFXLockTimer], a
     ld a, $37
     ld [rNR10], a
     ld a, $80
@@ -2044,6 +2065,8 @@ PlaySFXEncounter:
     ret
 
 PlaySFXAttack:
+    ld a, 14
+    ld [wSFXLockCh4], a
     ld a, $08
     ld [rNR41], a
     ld a, $F2
@@ -2055,6 +2078,8 @@ PlaySFXAttack:
     ret
 
 PlaySFXHit:
+    ld a, 14
+    ld [wSFXLockCh4], a
     ld a, $10
     ld [rNR41], a
     ld a, $F1
@@ -2292,9 +2317,534 @@ OverworldMapData:
 
 
 ; ===========================================================================
+; 4-Channel DMG Music Engine (Intro Theme & Game Screen BGM)
+; ===========================================================================
+DEF TRACK_NONE         EQU 0
+DEF TRACK_INTRO        EQU 1
+DEF TRACK_GAME         EQU 2
+
+DEF MUSIC_TEMPO_INTRO  EQU 6   ; 6 frames per 16th-note step (~125 BPM, driving intro)
+DEF MUSIC_TEMPO_GAME   EQU 9   ; 9 frames per 16th-note step (~83 BPM, slow upbeat BGM)
+DEF NOTE_HOLD          EQU 0   ; Sustain current note
+DEF NOTE_REST          EQU $FF ; Silence channel
+
+; Note indices into MusicFreqTable (1..37 = C3..C6; 1 octave lower on Wave CH3)
+DEF N_C3  EQU 1
+DEF N_CS3 EQU 2
+DEF N_D3  EQU 3
+DEF N_DS3 EQU 4
+DEF N_E3  EQU 5
+DEF N_F3  EQU 6
+DEF N_FS3 EQU 7
+DEF N_G3  EQU 8
+DEF N_GS3 EQU 9
+DEF N_A3  EQU 10
+DEF N_AS3 EQU 11
+DEF N_B3  EQU 12
+
+DEF N_C4  EQU 13
+DEF N_CS4 EQU 14
+DEF N_D4  EQU 15
+DEF N_DS4 EQU 16
+DEF N_E4  EQU 17
+DEF N_F4  EQU 18
+DEF N_FS4 EQU 19
+DEF N_G4  EQU 20
+DEF N_GS4 EQU 21
+DEF N_A4  EQU 22
+DEF N_AS4 EQU 23
+DEF N_B4  EQU 24
+
+DEF N_C5  EQU 25
+DEF N_CS5 EQU 26
+DEF N_D5  EQU 27
+DEF N_DS5 EQU 28
+DEF N_E5  EQU 29
+DEF N_F5  EQU 30
+DEF N_FS5 EQU 31
+DEF N_G5  EQU 32
+DEF N_GS5 EQU 33
+DEF N_A5  EQU 34
+DEF N_AS5 EQU 35
+DEF N_B5  EQU 36
+DEF N_C6  EQU 37
+
+; Drum indices for Channel 4 (Noise)
+DEF D_NONE  EQU 0
+DEF D_KICK  EQU 1
+DEF D_SNARE EQU 2
+DEF D_HAT   EQU 3
+DEF D_OHAT  EQU 4
+
+InitIntroMusic:
+    ld a, MUSIC_TEMPO_INTRO
+    ld [wMusicTempo], a
+    ld a, TRACK_INTRO
+    jr StartMusicTrack
+
+InitGameMusic:
+    ld a, MUSIC_TEMPO_GAME
+    ld [wMusicTempo], a
+    ld a, TRACK_GAME
+    ; Fall through to StartMusicTrack
+
+StartMusicTrack:
+    ld [wMusicPlaying], a
+
+    ; Ensure master sound is enabled and routed to L+R
+    ld a, $80
+    ld [rNR52], a
+    ld a, $77
+    ld [rNR50], a
+    ld a, $FF
+    ld [rNR51], a
+
+    ; Load resonant bass waveform into Channel 3 Wave RAM ($FF30-$FF3F)
+    xor a
+    ld [rNR30], a ; Disable CH3 DAC before writing Wave RAM
+    ld hl, CustomWaveBass
+    ld de, _AUD3WAVERAM
+    ld b, 16
+.loadWave:
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec b
+    jr nz, .loadWave
+
+    ld a, $80
+    ld [rNR30], a ; Enable CH3 DAC
+    xor a
+    ld [rNR32], a ; Start muted until first bass note
+
+    ; Initialize sequencer state
+    xor a
+    ld [wMusicStep], a
+    ld [wSFXLockTimer], a
+    ld [wSFXLockCh4], a
+    ld a, 1
+    ld [wMusicTick], a
+    ret
+
+StopMusic:
+    xor a
+    ld [wMusicPlaying], a
+    ld [wSFXLockTimer], a
+    ld [wSFXLockCh4], a
+    ld [rNR12], a
+    ld [rNR22], a
+    ld [rNR30], a
+    ld [rNR32], a
+    ld [rNR42], a
+    ld a, $80
+    ld [rNR14], a
+    ld [rNR24], a
+    ld [rNR44], a
+    ret
+
+UpdateMusic:
+    ; Decrement Channel 1 SFX lock timer if active
+    ld a, [wSFXLockTimer]
+    or a
+    jr z, .checkCh4Lock
+    dec a
+    ld [wSFXLockTimer], a
+
+.checkCh4Lock:
+    ; Decrement Channel 4 SFX lock timer if active
+    ld a, [wSFXLockCh4]
+    or a
+    jr z, .checkPlaying
+    dec a
+    ld [wSFXLockCh4], a
+
+.checkPlaying:
+    ld a, [wMusicPlaying]
+    or a
+    ret z
+
+    ; Tick frame counter down to 0
+    ld hl, wMusicTick
+    dec [hl]
+    ret nz
+    ld a, [wMusicTempo]
+    ld [hl], a
+
+    ; Current step index (0..127) in BC
+    ld a, [wMusicStep]
+    ld c, a
+    ld b, 0
+
+    ; --- Channel 2: Lead Melody (50% Duty Pulse) ---
+    ld hl, IntroSongCh2Lead
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    jr nz, .readCh2
+    ld hl, GameSongCh2Lead
+.readCh2:
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .doneCh2 ; NOTE_HOLD
+    cp NOTE_REST
+    jr nz, .playCh2
+    xor a
+    ld [rNR22], a
+    ld a, $80
+    ld [rNR24], a
+    jr .doneCh2
+.playCh2:
+    call GetNoteFreqDE
+    ld a, $80 ; 50% duty cycle (classic warm lead)
+    ld [rNR21], a
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    ld a, $E3 ; Volume 14, decay 3 for fast intro
+    jr nz, .setCh2Env
+    ld a, $D4 ; Volume 13, warm sustain decay 4 for slow upbeat BGM
+.setCh2Env:
+    ld [rNR22], a
+    ld a, e
+    ld [rNR23], a
+    ld a, d
+    or $80
+    ld [rNR24], a
+.doneCh2:
+
+    ; --- Channel 1: Harmony & Baroque/Bell Arpeggios (25% Duty Pulse) ---
+    ld a, [wSFXLockTimer]
+    or a
+    jr nz, .doneCh1 ; Yield Channel 1 while UI/Battle SFX is playing
+    ld hl, IntroSongCh1Harm
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    jr nz, .readCh1
+    ld hl, GameSongCh1Harm
+.readCh1:
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .doneCh1 ; NOTE_HOLD
+    cp NOTE_REST
+    jr nz, .playCh1
+    xor a
+    ld [rNR12], a
+    ld a, $80
+    ld [rNR14], a
+    jr .doneCh1
+.playCh1:
+    call GetNoteFreqDE
+    xor a
+    ld [rNR10], a ; No sweep
+    ld a, $40 ; 25% duty cycle (bright counterpoint/arpeggio timbre)
+    ld [rNR11], a
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    ld a, $A2 ; Volume 10, decay 2 for intro
+    jr nz, .setCh1Env
+    ld a, $93 ; Volume 9, gentle bell decay 3 for game BGM
+.setCh1Env:
+    ld [rNR12], a
+    ld a, e
+    ld [rNR13], a
+    ld a, d
+    or $80
+    ld [rNR14], a
+.doneCh1:
+
+    ; --- Channel 3: Wave Bass ---
+    ld hl, IntroSongCh3Bass
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    jr nz, .readCh3
+    ld hl, GameSongCh3Bass
+.readCh3:
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .doneCh3 ; NOTE_HOLD
+    cp NOTE_REST
+    jr nz, .playCh3
+    xor a
+    ld [rNR32], a
+    jr .doneCh3
+.playCh3:
+    call GetNoteFreqDE
+    xor a
+    ld [rNR30], a
+    ld a, $80
+    ld [rNR30], a
+    ld a, $20 ; 100% Wave output level
+    ld [rNR32], a
+    ld a, e
+    ld [rNR33], a
+    ld a, d
+    or $80
+    ld [rNR34], a
+.doneCh3:
+
+    ; --- Channel 4: Percussion (Kick / Snare / Hi-Hat) ---
+    ld a, [wSFXLockCh4]
+    or a
+    jr nz, .doneCh4 ; Yield Channel 4 while attack/hit SFX is playing
+    ld hl, IntroSongCh4Drums
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    jr nz, .readCh4
+    ld hl, GameSongCh4Drums
+.readCh4:
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .doneCh4
+    cp D_KICK
+    jr z, .drumKick
+    cp D_SNARE
+    jr z, .drumSnare
+    cp D_OHAT
+    jr z, .drumOpenHat
+    ; Default: D_HAT (Closed crisp hi-hat)
+    ld a, $3C
+    ld [rNR41], a
+    ld a, $61
+    ld [rNR42], a
+    ld a, $11
+    ld [rNR43], a
+    ld a, $C0
+    ld [rNR44], a
+    jr .doneCh4
+.drumKick:
+    ld a, $30
+    ld [rNR41], a
+    ld a, $C1
+    ld [rNR42], a
+    ld a, $55
+    ld [rNR43], a
+    ld a, $80
+    ld [rNR44], a
+    jr .doneCh4
+.drumSnare:
+    ld a, $20
+    ld [rNR41], a
+    ld a, $D1
+    ld [rNR42], a
+    ld a, $34
+    ld [rNR43], a
+    ld a, $80
+    ld [rNR44], a
+    jr .doneCh4
+.drumOpenHat:
+    ld a, $10
+    ld [rNR41], a
+    ld a, $82
+    ld [rNR42], a
+    ld a, $12
+    ld [rNR43], a
+    ld a, $80
+    ld [rNR44], a
+.doneCh4:
+
+    ; Advance step (0..127 loop)
+    ld a, [wMusicStep]
+    inc a
+    and $7F
+    ld [wMusicStep], a
+    ret
+
+; Look up 11-bit period for note index A (1..37) into DE (E = low, D = high)
+; Preserves BC
+GetNoteFreqDE:
+    dec a
+    add a
+    ld e, a
+    ld d, 0
+    ld hl, MusicFreqTable
+    add hl, de
+    ld a, [hl+]
+    ld e, a
+    ld d, [hl]
+    ret
+
+; 16-byte (32-sample) punchy asymmetric bass/synth waveform
+CustomWaveBass:
+    db $FF, $EE, $DD, $CC, $BB, $AA, $99, $88
+    db $66, $44, $22, $00, $11, $33, $77, $BB
+
+; Standard DMG 11-bit period table from C3 (index 1) to C6 (index 37)
+MusicFreqTable:
+    dw $0416, $044E, $0483, $04B5, $04E5, $0511, $053B, $0563, $0589, $05AC, $05CE, $05ED ; C3..B3
+    dw $060B, $0627, $0642, $065B, $0672, $0689, $069E, $06B2, $06C4, $06D6, $06E7, $06F7 ; C4..B4
+    dw $0706, $0714, $0721, $072D, $0739, $0744, $074F, $0759, $0762, $076B, $0773, $077B ; C5..B5
+    dw $0783 ; C6
+
+; ---------------------------------------------------------------------------
+; Intro Theme ("Amity Overture" - 8 Bars, 128 Steps)
+; Key: E Minor / G Major, 16th-note resolution
+; ---------------------------------------------------------------------------
+
+; Channel 2: Heroic Gothic/Baroque Lead Melody
+IntroSongCh2Lead:
+    ; Bar 1 (Em): Heroic theme entry
+    db N_E5, 0, 0, N_B4,  N_C5, N_B4, N_A4, N_G4,  N_FS4, N_G4, N_A4, N_B4,  N_G4, 0, N_E4, 0
+    ; Bar 2 (C -> D): Rising sequence
+    db N_C5, 0, 0, N_G4,  N_A4, N_G4, N_FS4, N_E4, N_D5, 0, 0, N_A4,         N_B4, N_C5, N_D5, N_FS5
+    ; Bar 3 (Em -> Bm): High soaring phrase
+    db N_E5, 0, 0, N_B4,  N_G5, 0, N_FS5, N_E5,    N_D5, 0, 0, N_B4,         N_FS4, N_G4, N_A4, N_B4
+    ; Bar 4 (C -> B7): Harmonic minor baroque cadence
+    db N_C5, N_B4, N_A4, N_G4,  N_FS4, N_G4, N_A4, N_C5,  N_B4, 0, N_A4, N_G4,  N_FS4, 0, N_DS4, 0
+    ; Bar 5 (G -> D/F#): Triumphant relative-major B-section
+    db N_B4, 0, N_D5, 0,  N_G5, 0, N_FS5, N_G5,    N_A5, 0, N_FS5, 0,        N_D5, 0, N_A4, N_B4
+    ; Bar 6 (Em -> C): Dual-lead counterpoint phrase
+    db N_G5, 0, N_E5, 0,  N_B4, 0, N_C5, N_B4,     N_A4, 0, N_B4, N_C5,      N_D5, 0, N_B4, N_G4
+    ; Bar 7 (Am -> Bm -> C -> D): Fast 16th-note baroque run!
+    db N_C5, N_B4, N_C5, N_D5,  N_E5, N_D5, N_E5, N_FS5,  N_G5, N_FS5, N_G5, N_A5,  N_B5, N_A5, N_G5, N_FS5
+    ; Bar 8 (Em -> B7 turnaround back to loop)
+    db N_E5, 0, N_B4, N_G4,  N_E4, N_G4, N_B4, N_E5,  N_DS5, 0, N_B4, N_FS4,  N_B4, 0, N_FS5, N_DS5
+
+; Channel 1: Baroque Arpeggios & Harmony in 3rds/6ths
+IntroSongCh1Harm:
+    ; Bar 1 (Em arpeggios & harmony)
+    db N_G4, N_E4, N_B3, N_E4,  N_A4, N_G4, N_FS4, N_E4,  N_D4, N_E4, N_FS4, N_G4,  N_E4, N_B3, N_G3, N_B3
+    ; Bar 2 (C -> D arpeggios)
+    db N_E4, N_C4, N_G3, N_C4,  N_E4, N_C4, N_A3, N_C4,   N_FS4, N_D4, N_A3, N_D4,  N_G4, N_A4, N_B4, N_D5
+    ; Bar 3 (Em -> Bm harmony)
+    db N_G4, N_E4, N_B3, N_G4,  N_B4, N_E4, N_A4, N_G4,   N_FS4, N_D4, N_B3, N_FS4, N_D4, N_E4, N_FS4, N_D4
+    ; Bar 4 (C -> B7 harmonic minor turnaround)
+    db N_E4, N_D4, N_C4, N_B3,  N_A3, N_B3, N_C4, N_E4,   N_DS4, N_B3, N_FS4, N_DS4, N_B3, N_FS3, N_B3, N_DS4
+    ; Bar 5 (G -> D/F# shimmering 16th arpeggios)
+    db N_D4, N_G4, N_B4, N_G4,  N_B4, N_G4, N_A4, N_B4,   N_FS4, N_A4, N_D5, N_A4,  N_FS4, N_D4, N_FS4, N_G4
+    ; Bar 6 (Em -> C arpeggio drive)
+    db N_B4, N_G4, N_E4, N_G4,  N_G4, N_E4, N_A4, N_G4,   N_E4, N_C4, N_G4, N_E4,   N_FS4, N_D4, N_G4, N_B3
+    ; Bar 7 (Harmonized 16th-note baroque run in 3rds!)
+    db N_A4, N_G4, N_A4, N_B4,  N_C5, N_B4, N_C5, N_D5,   N_E5, N_D5, N_E5, N_FS5,  N_G5, N_FS5, N_E5, N_D5
+    ; Bar 8 (Em -> B7 turnaround harmony)
+    db N_G4, N_E4, N_G4, N_E4,  N_B3, N_E4, N_G4, N_G4,   N_FS4, N_DS4, N_FS4, N_DS4, N_FS4, N_B3, N_B4, N_A4
+
+; Channel 3: Driving Octave-Jumping Wave Bass (sounds 1 octave lower)
+IntroSongCh3Bass:
+    ; Bar 1 (Em octave bass)
+    db N_E3, N_E4, N_E3, N_E4,  N_E3, N_E4, N_E3, N_E4,   N_E3, N_E4, N_E3, N_E4,   N_E3, N_G3, N_B3, N_D4
+    ; Bar 2 (C -> D octave bass)
+    db N_C3, N_C4, N_C3, N_C4,  N_C3, N_C4, N_C3, N_C4,   N_D3, N_D4, N_D3, N_D4,   N_D3, N_E3, N_FS3, N_A3
+    ; Bar 3 (Em -> Bm octave bass)
+    db N_E3, N_E4, N_E3, N_E4,  N_E3, N_E4, N_E3, N_D4,   N_B3, N_B4, N_B3, N_B4,   N_B3, N_A3, N_G3, N_FS3
+    ; Bar 4 (C -> B7 bass)
+    db N_C3, N_C4, N_C3, N_C4,  N_A3, N_A4, N_A3, N_A4,   N_B3, N_B4, N_B3, N_B4,   N_B3, N_FS3, N_A3, N_B3
+    ; Bar 5 (G -> D/F# bass)
+    db N_G3, N_G4, N_G3, N_G4,  N_G3, N_G4, N_B3, N_D4,   N_FS3, N_FS4, N_FS3, N_FS4, N_D3, N_D4, N_E3, N_FS3
+    ; Bar 6 (Em -> C -> G bass)
+    db N_E3, N_E4, N_E3, N_E4,  N_E3, N_E4, N_D3, N_D4,   N_C3, N_C4, N_C3, N_C4,   N_G3, N_G4, N_G3, N_B3
+    ; Bar 7 (Am -> Bm -> C -> D rising bass)
+    db N_A3, N_A4, N_A3, N_A4,  N_B3, N_B4, N_B3, N_B4,   N_C3, N_C4, N_C3, N_C4,   N_D3, N_D4, N_D3, N_FS3
+    ; Bar 8 (Em -> B7 cadence bass)
+    db N_E3, N_E4, N_E3, N_E4,  N_G3, N_G4, N_E3, N_E4,   N_B3, N_B4, N_FS3, N_FS4, N_B3, N_A3, N_G3, N_FS3
+
+; Channel 4: Crisp Drum Kit (Kick, Snare, Closed/Open Hats)
+IntroSongCh4Drums:
+    ; Bar 1
+    db D_KICK, D_HAT, D_HAT, D_HAT,   D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_HAT, D_OHAT, D_HAT
+    ; Bar 2
+    db D_KICK, D_HAT, D_HAT, D_HAT,   D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 3
+    db D_KICK, D_HAT, D_HAT, D_HAT,   D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_HAT, D_OHAT, D_HAT
+    ; Bar 4 (Turnaround snare fill)
+    db D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_HAT, D_KICK, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_HAT, D_SNARE, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 5
+    db D_KICK, D_HAT, D_HAT, D_KICK,  D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_HAT, D_KICK,  D_SNARE, D_HAT, D_OHAT, D_HAT
+    ; Bar 6
+    db D_KICK, D_HAT, D_HAT, D_KICK,  D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_SNARE, D_OHAT, D_HAT
+    ; Bar 7 (Driving double-kick under 16th run)
+    db D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_SNARE, D_SNARE, D_OHAT
+    ; Bar 8 (Dramatic loop fill)
+    db D_KICK, D_HAT, D_KICK, D_HAT,  D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_SNARE, D_OHAT, D_SNARE
+
+; ---------------------------------------------------------------------------
+; Game Screen BGM ("Sunlight in Amity Village" - 8 Bars, 128 Steps)
+; Key: G Major / E Minor, Slow Upbeat Strolling Groove (~83 BPM)
+; ---------------------------------------------------------------------------
+
+; Channel 2: Warm Upbeat Overworld Melody
+GameSongCh2Lead:
+    ; Bar 1 (G -> D/F#): Sunny bouncy opening motif
+    db N_D5, 0, N_B4, N_D5,  N_G5, 0, 0, N_FS5,   N_E5, 0, N_D5, 0,         N_A4, 0, N_B4, N_C5
+    ; Bar 2 (Em7 -> Bm7): Gentle strolling response
+    db N_B4, 0, N_G4, N_A4,  N_B4, 0, N_D5, 0,    N_E5, 0, N_D5, N_B4,      N_A4, 0, 0, 0
+    ; Bar 3 (C -> G/B): Bright rising hook
+    db N_E5, 0, N_G5, 0,     N_FS5, N_E5, N_D5, 0, N_D5, 0, N_B4, N_D5,     N_G5, 0, N_D5, 0
+    ; Bar 4 (Am7 -> D7): Upbeat half-cadence turnaround
+    db N_C5, 0, N_B4, N_A4,  N_G4, 0, N_A4, N_B4,  N_A4, 0, 0, N_D5,        N_E5, 0, N_FS5, 0
+    ; Bar 5 (C -> D7): Soaring B-section melody
+    db N_G5, 0, 0, N_FS5,    N_E5, 0, N_G5, 0,     N_FS5, 0, 0, N_E5,       N_D5, 0, N_FS5, N_A5
+    ; Bar 6 (Bm7 -> Em7): Expressive melodic cascade
+    db N_G5, 0, N_FS5, N_D5, N_B4, 0, 0, N_D5,     N_E5, 0, N_D5, N_B4,     N_G4, 0, N_A4, N_B4
+    ; Bar 7 (Am7 -> Bm7 -> C -> D7): Cheerful syncopated climb
+    db N_C5, 0, N_A4, N_C5,  N_D5, 0, N_B4, N_D5,  N_E5, 0, N_G5, N_E5,     N_FS5, 0, N_A5, N_FS5
+    ; Bar 8 (G -> D7 turnaround): Warm resolution & upbeat pickup into Bar 1
+    db N_G5, 0, 0, N_D5,     N_B4, 0, N_G4, 0,     N_A4, 0, N_B4, N_C5,     N_D5, 0, N_E5, N_FS5
+
+; Channel 1: Sparkling Bell Arpeggios & Sweet 3rd/6th Counter-Melody
+GameSongCh1Harm:
+    ; Bar 1 (G -> D/F#)
+    db N_B4, N_G4, N_D4, N_G4,  N_B4, N_D5, N_B4, N_A4,   N_A4, N_FS4, N_D4, N_FS4,  N_D4, N_FS4, N_G4, N_A4
+    ; Bar 2 (Em7 -> Bm7)
+    db N_G4, N_E4, N_B3, N_E4,  N_G4, N_B4, N_G4, N_B4,   N_B4, N_FS4, N_D4, N_FS4,  N_FS4, N_D4, N_E4, N_FS4
+    ; Bar 3 (C -> G/B)
+    db N_C5, N_G4, N_E4, N_G4,  N_C5, N_G4, N_FS4, N_G4,  N_B4, N_G4, N_D4, N_G4,    N_B4, N_D5, N_B4, N_G4
+    ; Bar 4 (Am7 -> D7)
+    db N_A4, N_E4, N_C4, N_E4,  N_E4, N_C4, N_E4, N_G4,   N_FS4, N_D4, N_A3, N_FS4,  N_G4, N_A4, N_B4, N_C5
+    ; Bar 5 (C -> D7)
+    db N_E5, N_C5, N_G4, N_C5,  N_C5, N_G4, N_E5, N_C5,   N_D5, N_A4, N_FS4, N_A4,   N_A4, N_FS4, N_A4, N_D5
+    ; Bar 6 (Bm7 -> Em7)
+    db N_D5, N_B4, N_FS4, N_B4, N_F4, N_D4, N_FS4, N_B4,  N_B4, N_G4, N_E4, N_G4,    N_E4, N_B3, N_E4, N_G4
+    ; Bar 7 (Am7 -> Bm7 -> C -> D7 harmonized climb)
+    db N_E4, N_C4, N_E4, N_A4,  N_FS4, N_D4, N_FS4, N_B4, N_G4, N_E4, N_C5, N_G4,    N_A4, N_FS4, N_D5, N_C5
+    ; Bar 8 (G -> D7 turnaround)
+    db N_B4, N_D5, N_B4, N_B4,  N_G4, N_D4, N_B3, N_D4,   N_FS4, N_D4, N_G4, N_A4,   N_B4, N_A4, N_C5, N_A4
+
+; Channel 3: Bouncy Syncopated Walking Wave Bass (sounds 1 octave lower)
+GameSongCh3Bass:
+    ; Bar 1 (G -> D/F#)
+    db N_G3, 0, NOTE_REST, N_G4,  N_G3, 0, N_D3, N_E3,   N_FS3, 0, NOTE_REST, N_FS4, N_D3, 0, N_E3, N_FS3
+    ; Bar 2 (Em7 -> Bm7)
+    db N_E3, 0, NOTE_REST, N_E4,  N_E3, 0, N_G3, N_A3,   N_B3, 0, NOTE_REST, N_B4,   N_B3, 0, N_D4, N_CS4
+    ; Bar 3 (C -> G/B)
+    db N_C3, 0, NOTE_REST, N_C4,  N_C3, 0, N_E3, N_G3,   N_B3, 0, NOTE_REST, N_B4,   N_G3, 0, N_D3, N_B3
+    ; Bar 4 (Am7 -> D7)
+    db N_A3, 0, NOTE_REST, N_A4,  N_E3, 0, N_G3, N_A3,   N_D3, 0, NOTE_REST, N_D4,   N_D3, 0, N_E3, N_FS3
+    ; Bar 5 (C -> D7)
+    db N_C3, 0, NOTE_REST, N_C4,  N_G3, 0, N_E3, N_C3,   N_D3, 0, NOTE_REST, N_D4,   N_A3, 0, N_FS3, N_D3
+    ; Bar 6 (Bm7 -> Em7)
+    db N_B3, 0, NOTE_REST, N_B4,  N_FS3, 0, N_D3, N_B3,  N_E3, 0, NOTE_REST, N_E4,   N_E3, 0, N_G3, N_B3
+    ; Bar 7 (Am7 -> Bm7 -> C -> D7 walking bass)
+    db N_A3, 0, N_A4, 0,          N_B3, 0, N_B4, 0,      N_C3, 0, N_C4, 0,           N_D3, 0, N_E3, N_FS3
+    ; Bar 8 (G -> D7 turnaround)
+    db N_G3, 0, NOTE_REST, N_G4,  N_D3, 0, N_B3, N_G3,   N_D3, 0, N_D4, 0,           N_D3, 0, N_E3, N_FS3
+
+; Channel 4: Relaxed Upbeat Overworld Percussion Groove
+GameSongCh4Drums:
+    ; Bar 1
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  0, D_HAT, D_KICK, 0,       D_SNARE, 0, D_OHAT, 0
+    ; Bar 2
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  0, D_HAT, D_KICK, 0,       D_SNARE, 0, D_HAT, D_SNARE
+    ; Bar 3
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  0, D_HAT, D_KICK, 0,       D_SNARE, 0, D_OHAT, 0
+    ; Bar 4
+    db D_KICK, 0, D_HAT, D_KICK,   D_SNARE, 0, D_HAT, 0,       D_KICK, 0, D_SNARE, D_HAT, D_SNARE, 0, D_OHAT, D_HAT
+    ; Bar 5
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  0, D_HAT, D_KICK, 0,       D_SNARE, 0, D_OHAT, 0
+    ; Bar 6
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  0, D_HAT, D_KICK, 0,       D_SNARE, D_HAT, D_OHAT, 0
+    ; Bar 7
+    db D_KICK, 0, D_HAT, D_KICK,   D_SNARE, 0, D_HAT, D_KICK,  D_KICK, 0, D_HAT, D_KICK,  D_SNARE, 0, D_OHAT, D_HAT
+    ; Bar 8
+    db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  D_KICK, 0, D_SNARE, 0,     D_SNARE, D_HAT, D_OHAT, D_SNARE
+
+; ===========================================================================
 ; Sound Effects (DMG Pulse Channel 1)
 ; ===========================================================================
 PlaySFXCursor:
+    ld a, 10
+    ld [wSFXLockTimer], a
     ld a, $00
     ld [rNR10], a
     ld a, $81
@@ -2308,6 +2858,8 @@ PlaySFXCursor:
     ret
 
 PlaySFXConfirm:
+    ld a, 14
+    ld [wSFXLockTimer], a
     ld a, $15
     ld [rNR10], a
     ld a, $80
@@ -2789,6 +3341,12 @@ wMonsterHP:     ds 1
 wMonsterATK:    ds 1
 wMonsterDEF:    ds 1
 wLastDamage:    ds 1
+wMusicPlaying:  ds 1
+wMusicTempo:    ds 1
+wMusicStep:     ds 1
+wMusicTick:     ds 1
+wSFXLockTimer:  ds 1
+wSFXLockCh4:    ds 1
 
 SECTION "HRAM DMA", HRAM[$FF80]
 hOAMDMA:
