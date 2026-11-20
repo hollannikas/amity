@@ -353,8 +353,8 @@ InitCharSelect:
     ld [wGameState], a
 
     ld a, [wMusicPlaying]
-    or a
-    call z, InitIntroMusic
+    cp TRACK_INTRO
+    call nz, InitIntroMusic
 
     ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
@@ -641,6 +641,9 @@ InitialEnemyY:
 
 ; Re-enter Overworld Map preserving player & entity positions
 EnterOverworldMap:
+    ld a, [wMusicPlaying]
+    cp TRACK_GAME
+    call nz, InitGameMusic
     call DisableLCD
     call ClearShadowOAM
 
@@ -1379,6 +1382,7 @@ WaitFramesB:
     ret
 
 InitBattle:
+    call InitBattleMusic
     call DisableLCD
     call ClearBGMap0
     call ClearShadowOAM
@@ -1846,7 +1850,7 @@ UpdateBattle:
     ret
 
 .monsterDefeated:
-    call PlaySFXConfirm
+    call InitVictoryJingle
     ; Hide cursor sprite
     xor a
     ld [wOAMBuffer + (4 * 4) + 0], a
@@ -1911,7 +1915,6 @@ UpdateBattle:
     add 2
     ld [wHeroDEF], a
 
-    call PlaySFXLevelUp
     call WaitVBlank
     call DrawBattleHUD
     ld de, StrBattleLevelUp
@@ -1970,7 +1973,7 @@ PlaySFXLevelUp:
 ; Game Over Screen State
 ; ===========================================================================
 InitGameOver:
-    call StopMusic
+    call InitGameOverJingle
     call DisableLCD
     call ClearBGMap0
     call ClearShadowOAM
@@ -2008,9 +2011,6 @@ InitGameOver:
     ld hl, _SCRN0 + (14 * 32) + 3
     ld de, StrGameOverRetry
     call PrintString
-
-    ; Play sad descending Game Over tone
-    call PlaySFXGameOver
 
     ld a, STATE_GAME_OVER
     ld [wGameState], a
@@ -2317,14 +2317,21 @@ OverworldMapData:
 
 
 ; ===========================================================================
-; 4-Channel DMG Music Engine (Intro Theme & Game Screen BGM)
+; 4-Channel DMG Music Engine (Intro, Overworld, Battle, Victory & Game Over)
 ; ===========================================================================
 DEF TRACK_NONE         EQU 0
 DEF TRACK_INTRO        EQU 1
 DEF TRACK_GAME         EQU 2
+DEF TRACK_BATTLE       EQU 3
+DEF TRACK_VICTORY      EQU 4
+DEF TRACK_GAMEOVER     EQU 5
 
-DEF MUSIC_TEMPO_INTRO  EQU 6   ; 6 frames per 16th-note step (~125 BPM, driving intro)
-DEF MUSIC_TEMPO_GAME   EQU 9   ; 9 frames per 16th-note step (~83 BPM, slow upbeat BGM)
+DEF MUSIC_TEMPO_INTRO    EQU 6 ; 6 frames per 16th-note step (~125 BPM, driving intro)
+DEF MUSIC_TEMPO_GAME     EQU 9 ; 9 frames per 16th-note step (~83 BPM, slow upbeat BGM)
+DEF MUSIC_TEMPO_BATTLE   EQU 5 ; 5 frames per 16th-note step (~150 BPM, urgent tactical alarm)
+DEF MUSIC_TEMPO_VICTORY  EQU 5 ; 5 frames per 16th-note step (triumphant fanfare)
+DEF MUSIC_TEMPO_GAMEOVER EQU 7 ; 7 frames per 16th-note step (solemn dirge)
+
 DEF NOTE_HOLD          EQU 0   ; Sustain current note
 DEF NOTE_REST          EQU $FF ; Silence channel
 
@@ -2379,17 +2386,84 @@ DEF D_OHAT  EQU 4
 InitIntroMusic:
     ld a, MUSIC_TEMPO_INTRO
     ld [wMusicTempo], a
+    ld a, $7F
+    ld [wMusicStepMask], a
+    ld a, 1
+    ld [wMusicLoop], a
+    ld hl, IntroSongCh2Lead
+    ld de, IntroSongCh1Harm
+    ld bc, IntroSongCh3Bass
+    call SetMusicPointers
+    ld hl, IntroSongCh4Drums
     ld a, TRACK_INTRO
-    jr StartMusicTrack
+    jp StartMusicTrack
 
 InitGameMusic:
     ld a, MUSIC_TEMPO_GAME
     ld [wMusicTempo], a
+    ld a, $7F
+    ld [wMusicStepMask], a
+    ld a, 1
+    ld [wMusicLoop], a
+    ld hl, GameSongCh2Lead
+    ld de, GameSongCh1Harm
+    ld bc, GameSongCh3Bass
+    call SetMusicPointers
+    ld hl, GameSongCh4Drums
     ld a, TRACK_GAME
+    jp StartMusicTrack
+
+InitBattleMusic:
+    ld a, MUSIC_TEMPO_BATTLE
+    ld [wMusicTempo], a
+    ld a, $7F
+    ld [wMusicStepMask], a
+    ld a, 1
+    ld [wMusicLoop], a
+    ld hl, BattleSongCh2Lead
+    ld de, BattleSongCh1Harm
+    ld bc, BattleSongCh3Bass
+    call SetMusicPointers
+    ld hl, BattleSongCh4Drums
+    ld a, TRACK_BATTLE
+    jr StartMusicTrack
+
+InitVictoryJingle:
+    ld a, MUSIC_TEMPO_VICTORY
+    ld [wMusicTempo], a
+    ld a, $1F ; 32 steps
+    ld [wMusicStepMask], a
+    xor a ; One-shot jingle (no loop)
+    ld [wMusicLoop], a
+    ld hl, VictoryJingleCh2Lead
+    ld de, VictoryJingleCh1Harm
+    ld bc, VictoryJingleCh3Bass
+    call SetMusicPointers
+    ld hl, VictoryJingleCh4Drums
+    ld a, TRACK_VICTORY
+    jr StartMusicTrack
+
+InitGameOverJingle:
+    ld a, MUSIC_TEMPO_GAMEOVER
+    ld [wMusicTempo], a
+    ld a, $1F ; 32 steps
+    ld [wMusicStepMask], a
+    xor a ; One-shot jingle (no loop)
+    ld [wMusicLoop], a
+    ld hl, GameOverJingleCh2Lead
+    ld de, GameOverJingleCh1Harm
+    ld bc, GameOverJingleCh3Bass
+    call SetMusicPointers
+    ld hl, GameOverJingleCh4Drums
+    ld a, TRACK_GAMEOVER
     ; Fall through to StartMusicTrack
 
 StartMusicTrack:
     ld [wMusicPlaying], a
+    ld a, l
+    ld [wMusicCh4Ptr], a
+    ld a, h
+    ld [wMusicCh4Ptr + 1], a
 
     ; Ensure master sound is enabled and routed to L+R
     ld a, $80
@@ -2424,6 +2498,22 @@ StartMusicTrack:
     ld [wSFXLockCh4], a
     ld a, 1
     ld [wMusicTick], a
+    ret
+
+; Store HL -> wMusicCh2Ptr, DE -> wMusicCh1Ptr, BC -> wMusicCh3Ptr
+SetMusicPointers:
+    ld a, l
+    ld [wMusicCh2Ptr], a
+    ld a, h
+    ld [wMusicCh2Ptr + 1], a
+    ld a, e
+    ld [wMusicCh1Ptr], a
+    ld a, d
+    ld [wMusicCh1Ptr + 1], a
+    ld a, c
+    ld [wMusicCh3Ptr], a
+    ld a, b
+    ld [wMusicCh3Ptr + 1], a
     ret
 
 StopMusic:
@@ -2470,18 +2560,16 @@ UpdateMusic:
     ld a, [wMusicTempo]
     ld [hl], a
 
-    ; Current step index (0..127) in BC
+    ; Current step index in BC
     ld a, [wMusicStep]
     ld c, a
     ld b, 0
 
     ; --- Channel 2: Lead Melody (50% Duty Pulse) ---
-    ld hl, IntroSongCh2Lead
-    ld a, [wMusicPlaying]
-    cp TRACK_GAME
-    jr nz, .readCh2
-    ld hl, GameSongCh2Lead
-.readCh2:
+    ld a, [wMusicCh2Ptr]
+    ld l, a
+    ld a, [wMusicCh2Ptr + 1]
+    ld h, a
     add hl, bc
     ld a, [hl]
     or a
@@ -2499,7 +2587,7 @@ UpdateMusic:
     ld [rNR21], a
     ld a, [wMusicPlaying]
     cp TRACK_GAME
-    ld a, $E3 ; Volume 14, decay 3 for fast intro
+    ld a, $E3 ; Volume 14, decay 3 for energetic themes & jingles
     jr nz, .setCh2Env
     ld a, $D4 ; Volume 13, warm sustain decay 4 for slow upbeat BGM
 .setCh2Env:
@@ -2511,16 +2599,14 @@ UpdateMusic:
     ld [rNR24], a
 .doneCh2:
 
-    ; --- Channel 1: Harmony & Baroque/Bell Arpeggios (25% Duty Pulse) ---
+    ; --- Channel 1: Harmony & Arpeggios (25% Duty Pulse) ---
     ld a, [wSFXLockTimer]
     or a
     jr nz, .doneCh1 ; Yield Channel 1 while UI/Battle SFX is playing
-    ld hl, IntroSongCh1Harm
-    ld a, [wMusicPlaying]
-    cp TRACK_GAME
-    jr nz, .readCh1
-    ld hl, GameSongCh1Harm
-.readCh1:
+    ld a, [wMusicCh1Ptr]
+    ld l, a
+    ld a, [wMusicCh1Ptr + 1]
+    ld h, a
     add hl, bc
     ld a, [hl]
     or a
@@ -2540,7 +2626,7 @@ UpdateMusic:
     ld [rNR11], a
     ld a, [wMusicPlaying]
     cp TRACK_GAME
-    ld a, $A2 ; Volume 10, decay 2 for intro
+    ld a, $B2 ; Volume 11, crisp decay 2
     jr nz, .setCh1Env
     ld a, $93 ; Volume 9, gentle bell decay 3 for game BGM
 .setCh1Env:
@@ -2553,12 +2639,10 @@ UpdateMusic:
 .doneCh1:
 
     ; --- Channel 3: Wave Bass ---
-    ld hl, IntroSongCh3Bass
-    ld a, [wMusicPlaying]
-    cp TRACK_GAME
-    jr nz, .readCh3
-    ld hl, GameSongCh3Bass
-.readCh3:
+    ld a, [wMusicCh3Ptr]
+    ld l, a
+    ld a, [wMusicCh3Ptr + 1]
+    ld h, a
     add hl, bc
     ld a, [hl]
     or a
@@ -2587,12 +2671,10 @@ UpdateMusic:
     ld a, [wSFXLockCh4]
     or a
     jr nz, .doneCh4 ; Yield Channel 4 while attack/hit SFX is playing
-    ld hl, IntroSongCh4Drums
-    ld a, [wMusicPlaying]
-    cp TRACK_GAME
-    jr nz, .readCh4
-    ld hl, GameSongCh4Drums
-.readCh4:
+    ld a, [wMusicCh4Ptr]
+    ld l, a
+    ld a, [wMusicCh4Ptr + 1]
+    ld h, a
     add hl, bc
     ld a, [hl]
     or a
@@ -2644,12 +2726,19 @@ UpdateMusic:
     ld [rNR44], a
 .doneCh4:
 
-    ; Advance step (0..127 loop)
+    ; Advance step and wrap by wMusicStepMask ($7F or $1F)
     ld a, [wMusicStep]
     inc a
-    and $7F
+    ld hl, wMusicStepMask
+    and [hl]
     ld [wMusicStep], a
-    ret
+    ret nz
+
+    ; Step wrapped to 0: check if track loops or stops (one-shot jingle)
+    ld a, [wMusicLoop]
+    or a
+    ret nz
+    jp StopMusic
 
 ; Look up 11-bit period for note index A (1..37) into DE (E = low, D = high)
 ; Preserves BC
@@ -2838,6 +2927,128 @@ GameSongCh4Drums:
     db D_KICK, 0, D_HAT, D_KICK,   D_SNARE, 0, D_HAT, D_KICK,  D_KICK, 0, D_HAT, D_KICK,  D_SNARE, 0, D_OHAT, D_HAT
     ; Bar 8
     db D_KICK, 0, D_HAT, 0,        D_SNARE, 0, D_HAT, D_KICK,  D_KICK, 0, D_SNARE, 0,     D_SNARE, D_HAT, D_OHAT, D_SNARE
+
+; ---------------------------------------------------------------------------
+; Fight Scene BGM ("Red Alert Encounter" - 8 Bars, 128 Steps)
+; MSX Tactical Espionage Alarm Style: Driving E Minor / Phrygian Ostinato (~150 BPM)
+; ---------------------------------------------------------------------------
+
+; Channel 2: Urgent Brass Alarm Stabs & Tactical Pursuit Lead
+BattleSongCh2Lead:
+    ; Bar 1 (Em/Bb): Iconic Red Alert syncopated brass stabs!
+    db N_B4, 0, NOTE_REST, N_B4,  0, NOTE_REST, N_C5, 0,       NOTE_REST, N_B4, 0, N_E5,  0, N_D5, N_C5, N_B4
+    ; Bar 2 (Em/Bb): Second alarm stab phrase with chromatic tension
+    db N_B4, 0, NOTE_REST, N_B4,  0, NOTE_REST, N_C5, 0,       NOTE_REST, N_D5, 0, N_F5,  0, N_E5, N_D5, N_C5
+    ; Bar 3 (Em -> C): High urgent pursuit motif
+    db N_E5, 0, 0, N_G5,          N_FS5, N_E5, N_D5, N_E5,     N_C5, 0, 0, N_E5,          N_D5, N_C5, N_B4, N_A4
+    ; Bar 4 (Am -> B7): Tense ascending tactical brass
+    db N_B4, 0, N_E5, 0,          N_FS5, 0, N_G5, 0,           N_A5, N_G5, N_FS5, N_E5,   N_DS5, 0, N_FS5, 0
+    ; Bar 5 (Em -> Dm): Infiltration crisis call-and-response
+    db N_G5, 0, N_FS5, N_G5,      N_E5, 0, N_B4, 0,            N_F5, 0, N_E5, N_F5,       N_D5, 0, N_A4, 0
+    ; Bar 6 (Cmaj7 -> B7): Chromatic spy-thriller sequence
+    db N_E5, 0, N_DS5, N_E5,      N_C5, 0, N_A4, 0,            N_B4, N_C5, N_DS5, N_E5,   N_FS5, 0, N_B4, 0
+    ; Bar 7 (Chromatic Siren Climb!): Urgent 16th-note alarm escalation
+    db N_E4, N_F4, N_FS4, N_G4,   N_GS4, N_A4, N_AS4, N_B4,    N_C5, N_CS5, N_D5, N_DS5,  N_E5, 0, N_G5, 0
+    ; Bar 8 (B7 Alert Turnaround): Dramatic double-stab cadence back to Bar 1
+    db N_FS5, 0, N_DS5, N_B4,     N_C5, 0, N_A4, N_FS4,        N_B4, NOTE_REST, N_B4, NOTE_REST, N_B4, N_FS4, N_G4, N_A4
+
+; Channel 1: Tense 4th/Tritone Alarm Harmony & Rapid 16th-Note Alert Pulse
+BattleSongCh1Harm:
+    ; Bar 1 (Harmonized stabs + rapid E4/B3 alert pulse)
+    db N_FS4, 0, NOTE_REST, N_FS4, 0, NOTE_REST, N_G4, 0,      NOTE_REST, N_FS4, 0, N_B4, 0, N_A4, N_G4, N_FS4
+    ; Bar 2
+    db N_FS4, 0, NOTE_REST, N_FS4, 0, NOTE_REST, N_G4, 0,      NOTE_REST, N_A4, 0, N_C5,  0, N_B4, N_A4, N_G4
+    ; Bar 3 (Rapid 16th-note MSX PSG tension ostinato)
+    db N_B4, N_E4, N_B4, N_E4,    N_A4, N_E4, N_G4, N_E4,      N_G4, N_C4, N_G4, N_C4,    N_FS4, N_C4, N_E4, N_C4
+    ; Bar 4
+    db N_G4, N_E4, N_B4, N_E4,    N_A4, N_FS4, N_B4, N_G4,     N_C5, N_B4, N_A4, N_G4,    N_FS4, N_DS4, N_B3, N_DS4
+    ; Bar 5
+    db N_B4, N_E4, N_A4, N_B4,    N_G4, N_E4, N_G4, N_E4,      N_A4, N_D4, N_G4, N_A4,    N_F4, N_D4, N_F4, N_D4
+    ; Bar 6
+    db N_G4, N_C4, N_FS4, N_G4,   N_E4, N_C4, N_E4, N_C4,      N_FS4, N_G4, N_A4, N_B4,   N_DS5, N_B4, N_FS4, N_DS4
+    ; Bar 7 (Harmonized chromatic siren climb in 3rds/4ths)
+    db N_B3, N_C4, N_CS4, N_D4,   N_DS4, N_E4, N_F4, N_FS4,    N_G4, N_GS4, N_A4, N_AS4,  N_B4, N_E4, N_B4, N_E5
+    ; Bar 8
+    db N_DS5, N_B4, N_FS4, N_DS4, N_E4, N_C4, N_E4, N_C4,      N_FS4, NOTE_REST, N_FS4, NOTE_REST, N_FS4, N_DS4, N_E4, N_FS4
+
+; Channel 3: Relentless MSX Red Alert Syncopated Ostinato Wave Bass
+BattleSongCh3Bass:
+    ; Bar 1 (Signature E - E - G - A - Bb - A - G - E ostinato!)
+    db N_E3, N_E3, N_G3, N_A3,    N_AS3, N_A3, N_G3, N_E3,     N_E3, N_E3, N_G3, N_A3,    N_AS3, N_A3, N_G3, N_E3
+    ; Bar 2
+    db N_E3, N_E3, N_G3, N_A3,    N_AS3, N_A3, N_G3, N_E3,     N_D3, N_D3, N_F3, N_G3,    N_A3, N_G3, N_F3, N_D3
+    ; Bar 3
+    db N_E3, N_E4, N_E3, N_E4,    N_E3, N_G3, N_A3, N_B3,      N_C3, N_C4, N_C3, N_C4,    N_C3, N_E3, N_G3, N_A3
+    ; Bar 4
+    db N_E3, N_E4, N_G3, N_G4,    N_FS3, N_FS4, N_E3, N_E4,    N_A3, N_A4, N_A3, N_G3,    N_B3, N_FS3, N_DS3, N_B3
+    ; Bar 5
+    db N_E3, N_E4, N_E3, N_G3,    N_A3, N_G3, N_E3, N_D3,      N_D3, N_D4, N_D3, N_F3,    N_G3, N_F3, N_D3, N_C3
+    ; Bar 6
+    db N_C3, N_C4, N_C3, N_E3,    N_G3, N_E3, N_C3, N_B3,      N_B3, N_B4, N_B3, N_B4,    N_B3, N_A3, N_G3, N_FS3
+    ; Bar 7 (Rising bass pulse under siren climb)
+    db N_E3, N_E3, N_F3, N_FS3,   N_G3, N_GS3, N_A3, N_AS3,    N_B3, N_C4, N_CS4, N_D4,   N_E4, N_B3, N_G3, N_E3
+    ; Bar 8
+    db N_B3, N_B4, N_B3, N_B4,    N_A3, N_A4, N_FS3, N_FS4,    N_B3, NOTE_REST, N_B3, NOTE_REST, N_B3, N_A3, N_G3, N_FS3
+
+; Channel 4: Tactical Military Snare & Kick Drive
+BattleSongCh4Drums:
+    ; Bar 1
+    db D_KICK, D_SNARE, D_HAT, D_SNARE,  D_KICK, D_HAT, D_SNARE, D_HAT,  D_KICK, D_HAT, D_SNARE, D_KICK, D_SNARE, D_HAT, D_OHAT, D_SNARE
+    ; Bar 2
+    db D_KICK, D_SNARE, D_HAT, D_SNARE,  D_KICK, D_HAT, D_SNARE, D_HAT,  D_KICK, D_HAT, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 3
+    db D_KICK, D_HAT, D_KICK, D_HAT,     D_SNARE, D_HAT, D_KICK, D_HAT,  D_KICK, D_HAT, D_KICK, D_HAT,   D_SNARE, D_HAT, D_OHAT, D_HAT
+    ; Bar 4
+    db D_KICK, D_HAT, D_KICK, D_HAT,     D_SNARE, D_HAT, D_KICK, D_SNARE, D_KICK, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 5
+    db D_KICK, D_HAT, D_SNARE, D_HAT,    D_KICK, D_KICK, D_SNARE, D_HAT, D_KICK, D_HAT, D_SNARE, D_HAT,  D_KICK, D_SNARE, D_OHAT, D_HAT
+    ; Bar 6
+    db D_KICK, D_HAT, D_SNARE, D_HAT,    D_KICK, D_KICK, D_SNARE, D_HAT, D_KICK, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 7 (Military snare roll escalation)
+    db D_KICK, D_SNARE, D_KICK, D_SNARE, D_KICK, D_SNARE, D_KICK, D_SNARE, D_KICK, D_SNARE, D_SNARE, D_SNARE, D_KICK, D_SNARE, D_OHAT, D_SNARE
+    ; Bar 8 (Alert stab punctuation)
+    db D_KICK, D_HAT, D_SNARE, D_HAT,    D_KICK, D_HAT, D_SNARE, D_HAT,  D_SNARE, 0, D_SNARE, 0,         D_SNARE, D_SNARE, D_OHAT, D_SNARE
+
+; ---------------------------------------------------------------------------
+; Win Battle Jingle ("Threads of Victory" - 32 Steps, One-Shot Fanfare)
+; Key: G Major, Triumphant 8-Bit RPG Victory Fanfare
+; ---------------------------------------------------------------------------
+VictoryJingleCh2Lead:
+    ; Rapid fanfare pickup (D5-D5-D5-G5! - D5-G5!) -> bVI-bVII-I climb (Eb5 -> F5 -> G5!)
+    db N_D5, N_D5, N_D5, N_G5,  0, N_D5, N_G5, 0,          N_DS5, 0, 0, N_F5,         0, 0, N_G5, 0
+    db N_A5, 0, N_FS5, N_D5,    N_G5, 0, 0, 0,             0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+VictoryJingleCh1Harm:
+    db N_B4, N_B4, N_B4, N_D5,  0, N_B4, N_D5, 0,          N_C5, 0, 0, N_D5,          0, 0, N_D5, 0
+    db N_E5, 0, N_C5, N_A4,     N_B4, 0, 0, 0,             0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+VictoryJingleCh3Bass:
+    db N_G3, N_G3, N_G3, N_G4,  0, N_D3, N_G3, 0,          N_DS3, 0, N_AS3, N_F3,     0, N_C4, N_G3, 0
+    db N_C3, 0, N_D3, 0,        N_G3, 0, N_D3, N_G3,       0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+VictoryJingleCh4Drums:
+    db D_SNARE, D_SNARE, D_SNARE, D_KICK, D_HAT, D_SNARE, D_KICK, D_HAT, D_KICK, D_HAT, D_SNARE, D_KICK, D_HAT, D_SNARE, D_KICK, D_OHAT
+    db D_KICK, D_SNARE, D_KICK, D_SNARE,  D_OHAT, 0, 0, 0,               0, 0, 0, 0,                     0, 0, 0, 0
+
+; ---------------------------------------------------------------------------
+; Game Over Jingle ("Severed Thread" - 32 Steps, One-Shot Dirge)
+; Key: E Minor, Solemn Descending Lament
+; ---------------------------------------------------------------------------
+GameOverJingleCh2Lead:
+    db N_E5, 0, N_D5, N_C5,     N_B4, 0, N_A4, N_G4,       N_FS4, 0, N_G4, N_A4,      N_FS4, 0, N_DS4, 0
+    db N_E4, 0, 0, 0,           0, 0, 0, 0,                0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+GameOverJingleCh1Harm:
+    db N_C5, 0, N_B4, N_A4,     N_G4, 0, N_FS4, N_E4,      N_DS4, 0, N_E4, N_FS4,     N_DS4, 0, N_B3, 0
+    db N_G3, 0, 0, 0,           0, 0, 0, 0,                0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+GameOverJingleCh3Bass:
+    db N_E3, 0, 0, N_D3,        N_C3, 0, 0, N_B3,          N_A3, 0, 0, N_FS3,         N_B3, 0, N_B3, 0
+    db N_E3, 0, 0, 0,           0, 0, 0, 0,                0, 0, 0, 0,                NOTE_REST, 0, 0, 0
+
+GameOverJingleCh4Drums:
+    db D_KICK, 0, 0, D_HAT,     D_SNARE, 0, 0, D_HAT,      D_KICK, 0, 0, D_HAT,       D_SNARE, 0, D_SNARE, 0
+    db D_OHAT, 0, 0, 0,         0, 0, 0, 0,                0, 0, 0, 0,                0, 0, 0, 0
 
 ; ===========================================================================
 ; Sound Effects (DMG Pulse Channel 1)
@@ -3344,9 +3555,15 @@ wLastDamage:    ds 1
 wMusicPlaying:  ds 1
 wMusicTempo:    ds 1
 wMusicStep:     ds 1
+wMusicStepMask: ds 1
+wMusicLoop:     ds 1
 wMusicTick:     ds 1
 wSFXLockTimer:  ds 1
 wSFXLockCh4:    ds 1
+wMusicCh2Ptr:   ds 2
+wMusicCh1Ptr:   ds 2
+wMusicCh3Ptr:   ds 2
+wMusicCh4Ptr:   ds 2
 
 SECTION "HRAM DMA", HRAM[$FF80]
 hOAMDMA:
