@@ -23,6 +23,9 @@ DEF INV_SLOTS         EQU 8 ; 4 columns x 2 rows grid of 16x16 items
 DEF CHAR_MALE         EQU 0
 DEF CHAR_FEMALE       EQU 1
 DEF CHAR_NONBINARY    EQU 2
+DEF CHAR_RUUSU        EQU 3
+DEF CHAR_MARA         EQU 4
+DEF NUM_CHARS         EQU 5
 
 ; ===========================================================================
 ; Interrupt Vectors & Header
@@ -96,6 +99,7 @@ EntryPoint:
     ld [wJoyHeld], a
     ld [wJoyPressed], a
     ld [wSelectedChar], a
+    ld [wSelectScroll], a
 
     ; Start at Splash Screen
     call InitSplashScreen
@@ -213,35 +217,45 @@ InitSplashScreen:
     ld de, StrCopyright
     call PrintString
 
-    ; Place the 3 playable heroes on the splash screen (y=80, x=56, 80, 104)
-    ; Hero M at OAM 0..3
+    ; Place the 4 playable heroes on the splash screen (y=80, x=38, 66, 94, 122)
+    ; Hero M (Aria) at OAM 0..3
     ld a, 80
     ld [wSpriteY], a
-    ld a, 52
+    ld a, 38
     ld [wSpriteX], a
     ld a, $D0
     ld [wSpriteTile], a
     ld a, 0
     call SetMetaSprite16x16
 
-    ; Hero F at OAM 4..7
+    ; Hero F (Sakura) at OAM 4..7
     ld a, 80
     ld [wSpriteY], a
-    ld a, 80
+    ld a, 66
     ld [wSpriteX], a
     ld a, $D8
     ld [wSpriteTile], a
     ld a, 4
     call SetMetaSprite16x16
 
-    ; Hero NB at OAM 8..11
+    ; Hero NB (Orion) at OAM 8..11
     ld a, 80
     ld [wSpriteY], a
-    ld a, 108
+    ld a, 94
     ld [wSpriteX], a
     ld a, $E0
     ld [wSpriteTile], a
     ld a, 8
+    call SetMetaSprite16x16
+
+    ; Hero 4 (Ruusu) at OAM 12..15
+    ld a, 80
+    ld [wSpriteY], a
+    ld a, 122
+    ld [wSpriteX], a
+    ld a, $E8
+    ld [wSpriteTile], a
+    ld a, 12
     call SetMetaSprite16x16
 
     ld a, STATE_SPLASH
@@ -254,7 +268,7 @@ InitSplashScreen:
     ret
 
 UpdateSplashScreen:
-    ; Animate the 3 heroes walking in place on splash screen
+    ; Animate the 4 heroes walking in place on splash screen
     ld a, [wFrameCounter]
     and %00010000
     jr z, .frame0
@@ -263,10 +277,10 @@ UpdateSplashScreen:
 .frame0:
     ld b, 0
 .applyAnim:
-    ; Hero M
+    ; Hero M (Aria)
     ld a, 80
     ld [wSpriteY], a
-    ld a, 52
+    ld a, 38
     ld [wSpriteX], a
     ld a, $D0
     add b
@@ -274,10 +288,10 @@ UpdateSplashScreen:
     ld a, 0
     call SetMetaSprite16x16
 
-    ; Hero F
+    ; Hero F (Sakura)
     ld a, 80
     ld [wSpriteY], a
-    ld a, 80
+    ld a, 66
     ld [wSpriteX], a
     ld a, $D8
     add b
@@ -285,15 +299,26 @@ UpdateSplashScreen:
     ld a, 4
     call SetMetaSprite16x16
 
-    ; Hero NB
+    ; Hero NB (Orion)
     ld a, 80
     ld [wSpriteY], a
-    ld a, 108
+    ld a, 94
     ld [wSpriteX], a
     ld a, $E0
     add b
     ld [wSpriteTile], a
     ld a, 8
+    call SetMetaSprite16x16
+
+    ; Hero 4 (Ruusu)
+    ld a, 80
+    ld [wSpriteY], a
+    ld a, 122
+    ld [wSpriteX], a
+    ld a, $E8
+    add b
+    ld [wSpriteTile], a
+    ld a, 12
     call SetMetaSprite16x16
 
     ; Check START or A button
@@ -306,51 +331,30 @@ UpdateSplashScreen:
     ret
 
 ; ===========================================================================
-; Character Selection State (M / F / NB)
+; Character Selection State (M / F / NB / RUUSU / MARA - 4-Row Scrolling List)
 ; ===========================================================================
 InitCharSelect:
     call DisableLCD
     call ClearBGMap0
     call ClearShadowOAM
 
-    ; Restore all 3 characters' front-facing sprite tiles ($D0..$E7) to VRAM $8D00
-    ld hl, SelectScreenHeroSprites
-    ld de, $8D00
-    ld bc, 24 * 16
-    call CopyData
-
-    ; Top Header Box (20x4 at 0,0)
+    ; Top Header Box (20x3 at 0,0)
     ld b, 0
     ld c, 0
     ld d, 20
-    ld e, 4
+    ld e, 3
     call DrawDialogBox
 
     ld hl, _SCRN0 + (1 * 32) + 2
     ld de, StrSelectHeader1
     call PrintString
-    ld hl, _SCRN0 + (2 * 32) + 3
-    ld de, StrSelectHeader2
-    call PrintString
 
-    ; Options Box (20x8 at 0,4)
+    ; Options Box (20x9 at 0,3 -> 4 visible rows at BG rows 4, 6, 8, 10)
     ld b, 0
-    ld c, 4
+    ld c, 3
     ld d, 20
-    ld e, 8
+    ld e, 9
     call DrawDialogBox
-
-    ld hl, _SCRN0 + (5 * 32) + 6
-    ld de, StrOptMale
-    call PrintString
-
-    ld hl, _SCRN0 + (7 * 32) + 6
-    ld de, StrOptFemale
-    call PrintString
-
-    ld hl, _SCRN0 + (9 * 32) + 6
-    ld de, StrOptNB
-    call PrintString
 
     ; Bottom Profile Description Box (20x6 at 0,12)
     ld b, 0
@@ -359,6 +363,8 @@ InitCharSelect:
     ld e, 6
     call DrawDialogBox
 
+    ; Render the 4 visible characters (sprites + text labels) starting at wSelectScroll
+    call DrawCharSelectList
     call DrawCharSelectDetails
 
     ld a, STATE_CHAR_SELECT
@@ -372,6 +378,90 @@ InitCharSelect:
     ld [rLCDC], a
     ret
 
+; Render the 4 visible character rows (0..3) starting from character index [wSelectScroll]:
+; - Copies each visible character's 8 front-facing tiles (Down F0 & F1) into VRAM $8D00..$8EFF ($D0, $D8, $E0, $E8)
+; - Prints the 4 visible option labels on BG rows 4, 6, 8, 10
+DrawCharSelectList:
+    ; Load 8 tiles (128 bytes) per visible slot (0..3) into VRAM $8D00 + slot*128
+    ld c, 0 ; visible slot 0..3
+    ld de, $8D00
+.loadVisSpritesLoop:
+    push bc
+    push de
+    ld a, [wSelectScroll]
+    add c
+    add a ; * 2 bytes per pointer
+    ld l, a
+    ld h, 0
+    ld bc, HeroSpriteBankTable
+    add hl, bc
+    ld a, [hl+]
+    ld h, [hl]
+    ld l, a ; HL = Sprites<Char>Tiles
+    pop de
+    push de
+    ld bc, 8 * 16 ; 128 bytes (Down F0 + Down F1)
+    call CopyDataVRAM
+    pop hl
+    ld bc, 8 * 16
+    add hl, bc
+    ld d, h
+    ld e, l ; DE += 128
+    pop bc
+    inc c
+    ld a, c
+    cp 4
+    jr c, .loadVisSpritesLoop
+
+    ; Print the 4 visible character option strings on BG rows 4, 6, 8, 10 (col 6)
+    ld hl, _SCRN0 + (4 * 32) + 6
+    ld a, [wSelectScroll]
+    call PrintCharSelectOptionRow
+
+    ld hl, _SCRN0 + (6 * 32) + 6
+    ld a, [wSelectScroll]
+    inc a
+    call PrintCharSelectOptionRow
+
+    ld hl, _SCRN0 + (8 * 32) + 6
+    ld a, [wSelectScroll]
+    add 2
+    call PrintCharSelectOptionRow
+
+    ld hl, _SCRN0 + (10 * 32) + 6
+    ld a, [wSelectScroll]
+    add 3
+    call PrintCharSelectOptionRow
+    ret
+
+; Print 10-char padded option label for character index A (0..4) at VRAM address HL
+PrintCharSelectOptionRow:
+    push hl
+    add a
+    ld e, a
+    ld d, 0
+    ld hl, HeroOptionStrTable
+    add hl, de
+    ld a, [hl+]
+    ld d, [hl]
+    ld e, a
+    pop hl
+    jp PrintString
+
+HeroSpriteBankTable:
+    dw SpritesAriaTiles
+    dw SpritesSakuraTiles
+    dw SpritesOrionTiles
+    dw SpritesRuusuTiles
+    dw SpritesMaraTiles
+
+HeroOptionStrTable:
+    dw StrOptMale
+    dw StrOptFemale
+    dw StrOptNB
+    dw StrOptRuusu
+    dw StrOptMara
+
 UpdateCharSelect:
     ; Animate sprites
     ld a, [wFrameCounter]
@@ -382,8 +472,8 @@ UpdateCharSelect:
 .f0:
     ld b, 0
 .drawSprites:
-    ; Draw M sprite next to option 0 (x=32, y=52)
-    ld a, 52
+    ; Draw visible slot 0 sprite (x=32, y=44, tile $D0)
+    ld a, 44
     ld [wSpriteY], a
     ld a, 32
     ld [wSpriteX], a
@@ -393,8 +483,8 @@ UpdateCharSelect:
     ld a, 0
     call SetMetaSprite16x16
 
-    ; Draw F sprite next to option 1 (x=32, y=68)
-    ld a, 68
+    ; Draw visible slot 1 sprite (x=32, y=60, tile $D8)
+    ld a, 60
     ld [wSpriteY], a
     ld a, 32
     ld [wSpriteX], a
@@ -404,8 +494,8 @@ UpdateCharSelect:
     ld a, 4
     call SetMetaSprite16x16
 
-    ; Draw NB sprite next to option 2 (x=32, y=84)
-    ld a, 84
+    ; Draw visible slot 2 sprite (x=32, y=76, tile $E0)
+    ld a, 76
     ld [wSpriteY], a
     ld a, 32
     ld [wSpriteX], a
@@ -415,20 +505,34 @@ UpdateCharSelect:
     ld a, 8
     call SetMetaSprite16x16
 
-    ; Draw Cursor Sprite at selected option
+    ; Draw visible slot 3 sprite (x=32, y=92, tile $E8)
+    ld a, 92
+    ld [wSpriteY], a
+    ld a, 32
+    ld [wSpriteX], a
+    ld a, $E8
+    add b
+    ld [wSpriteTile], a
+    ld a, 12
+    call SetMetaSprite16x16
+
+    ; Draw Cursor Sprite at visible row (wSelectedChar - wSelectScroll) (OAM slot 16)
+    ld a, [wSelectScroll]
+    ld c, a
     ld a, [wSelectedChar]
+    sub c
     sla a
     sla a
     sla a
-    sla a ; * 16 pixels per option
-    add 56
-    ld [wOAMBuffer + (12 * 4) + 0], a ; Y
+    sla a ; * 16 pixels per visible row
+    add 48
+    ld [wOAMBuffer + (16 * 4) + 0], a ; Y
     ld a, 20
-    ld [wOAMBuffer + (12 * 4) + 1], a ; X
+    ld [wOAMBuffer + (16 * 4) + 1], a ; X
     ld a, $0A ; Cursor '>' tile
-    ld [wOAMBuffer + (12 * 4) + 2], a
+    ld [wOAMBuffer + (16 * 4) + 2], a
     xor a
-    ld [wOAMBuffer + (12 * 4) + 3], a
+    ld [wOAMBuffer + (16 * 4) + 3], a
 
     ; Input handling
     ld a, [wJoyPressed]
@@ -444,22 +548,59 @@ UpdateCharSelect:
     call PlaySFXCursor
     ld a, [wSelectedChar]
     inc a
-    cp 3
-    jr c, .storeSel
+    cp NUM_CHARS
+    jr nc, .resetToTop
+    ld [wSelectedChar], a
+    ; Check if cursor moved past the 4 visible rows (wSelectedChar - wSelectScroll >= 4)
+    ld b, a
+    ld a, [wSelectScroll]
+    ld c, a
+    ld a, b
+    sub c
+    cp 4
+    jr c, .refreshDetailsOnly
+    ; Scroll list one up to reveal the next character!
+    ld a, b
+    sub 3
+    ld [wSelectScroll], a
+    jr .refreshListAndDetails
+
+.resetToTop:
+    ; At the end of the list, pressing DOWN resets selection and scroll back to the first character
     xor a
-    jr .storeSel
+    ld [wSelectedChar], a
+    ld [wSelectScroll], a
+    jr .refreshListAndDetails
 
 .moveUp:
     call PlaySFXCursor
     ld a, [wSelectedChar]
     or a
-    jr nz, .decSel
-    ld a, 2
-    jr .storeSel
-.decSel:
+    jr z, .wrapToEnd
     dec a
-.storeSel:
     ld [wSelectedChar], a
+    ld b, a
+    ld a, [wSelectScroll]
+    cp b
+    jr c, .refreshDetailsOnly
+    jr z, .refreshDetailsOnly
+    ; Cursor moved above top visible row -> scroll list down
+    ld a, b
+    ld [wSelectScroll], a
+    jr .refreshListAndDetails
+
+.wrapToEnd:
+    ld a, NUM_CHARS - 1
+    ld [wSelectedChar], a
+    ld a, NUM_CHARS - 4
+    ld [wSelectScroll], a
+
+.refreshListAndDetails:
+    call DrawCharSelectList
+    call DrawCharSelectDetails
+    ret
+
+.refreshDetailsOnly:
     call DrawCharSelectDetails
     ret
 
@@ -467,6 +608,21 @@ UpdateCharSelect:
     call PlaySFXConfirm
     call InitOverworld
     ret
+
+; Copy BC bytes from HL to VRAM DE safely during VBlank/HBlank without turning off the LCD
+CopyDataVRAM:
+    ld a, b
+    or c
+    ret z
+.waitVRAM:
+    ld a, [rSTAT]
+    and %00000010
+    jr nz, .waitVRAM
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
+    jr CopyDataVRAM
 
 ; Clear 17 characters (cols 2..18) on row HL in _SCRN0 cleanly during VBlank/HBlank
 ClearSelectDescLine:
@@ -504,7 +660,11 @@ DrawCharSelectDetails:
     jr z, .male
     cp CHAR_FEMALE
     jr z, .female
-    ; Non-Binary
+    cp CHAR_RUUSU
+    jr z, .ruusu
+    cp CHAR_MARA
+    jr z, .mara
+    ; Non-Binary (Orion)
     ld hl, _SCRN0 + (13 * 32) + 2
     ld de, StrDescNB1
     call PrintString
@@ -513,6 +673,28 @@ DrawCharSelectDetails:
     call PrintString
     ld hl, _SCRN0 + (15 * 32) + 2
     ld de, StrDescNB3
+    call PrintString
+    ret
+.ruusu:
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrDescR1
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrDescR2
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrDescR3
+    call PrintString
+    ret
+.mara:
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrDescMara1
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrDescMara2
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrDescMara3
     call PrintString
     ret
 .male:
@@ -570,11 +752,22 @@ InitOverworld:
     jr z, .initStatsM
     cp CHAR_FEMALE
     jr z, .initStatsF
+    cp CHAR_RUUSU
+    jr z, .initStatsR
     ; NB: Orion
     ld a, 30
     ld [wHeroMaxHP], a
     ld [wHeroHP], a
     ld a, 9
+    ld [wHeroATK], a
+    ld a, 4
+    ld [wHeroDEF], a
+    jr .doneStatsInit
+.initStatsR:
+    ld a, 32
+    ld [wHeroMaxHP], a
+    ld [wHeroHP], a
+    ld a, 10
     ld [wHeroATK], a
     ld a, 4
     ld [wHeroDEF], a
@@ -717,7 +910,17 @@ LoadSelectedPlayerSprites:
     jr z, .loadSprAria
     cp CHAR_FEMALE
     jr z, .loadSprSakura
+    cp CHAR_RUUSU
+    jr z, .loadSprRuusu
+    cp CHAR_MARA
+    jr z, .loadSprMara
     ld hl, SpritesOrionTiles
+    jr .copySpr
+.loadSprRuusu:
+    ld hl, SpritesRuusuTiles
+    jr .copySpr
+.loadSprMara:
+    ld hl, SpritesMaraTiles
     jr .copySpr
 .loadSprAria:
     ld hl, SpritesAriaTiles
@@ -1067,7 +1270,17 @@ LoadPlayerPortraitTiles:
     jr z, .loadAria
     cp CHAR_FEMALE
     jr z, .loadSakura
+    cp CHAR_RUUSU
+    jr z, .loadRuusu
+    cp CHAR_MARA
+    jr z, .loadMara
     ld hl, PortraitOrionTiles
+    jr .doCopyPortrait
+.loadRuusu:
+    ld hl, PortraitRuusuTiles
+    jr .doCopyPortrait
+.loadMara:
+    ld hl, PortraitMaraTiles
     jr .doCopyPortrait
 .loadAria:
     ld hl, PortraitAriaTiles
@@ -1103,12 +1316,16 @@ DrawNPCDialoguePage:
     or a
     jp nz, .page1
 
-    ; Page 0: Show Selected Player Character's Portrait & Dialogue from second reference image!
+    ; Page 0: Show Selected Player Character's Portrait & Dialogue
     ld a, [wSelectedChar]
     cp CHAR_MALE
-    jr z, .dialogAria
+    jp z, .dialogAria
     cp CHAR_FEMALE
     jp z, .dialogSakura
+    cp CHAR_RUUSU
+    jr z, .dialogRuusu
+    cp CHAR_MARA
+    jr z, .dialogMara
 
     ; --- NON-BINARY: ORION (♦オリオン♦ / ORION) ---
     ld hl, _SCRN0 + (9 * 32) + 6
@@ -1131,6 +1348,47 @@ DrawNPCDialoguePage:
     call PrintString
     ld hl, _SCRN0 + (16 * 32) + 2
     ld de, StrOrionL5
+    call PrintString
+    ret
+
+.dialogRuusu:
+    ; --- RUUSU (♦RUUSU♦ / RUUSU) ---
+    ld hl, _SCRN0 + (9 * 32) + 6
+    ld de, StrHeaderRuusu
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrRuusuL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrRuusuL2
+    call PrintString
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrRuusuL3
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrRuusuL4
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrRuusuL5
+    call PrintString
+    ret
+
+.dialogMara:
+    ; --- MARA (♦MARA♦ / MARA) ---
+    ld hl, _SCRN0 + (9 * 32) + 6
+    ld de, StrHeaderMara
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrMaraL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrMaraL2
+    call PrintString
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrMaraL3
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrMaraL4
     call PrintString
     ret
 
@@ -2326,7 +2584,17 @@ DrawBattleHUD:
     jr z, .hudM
     cp CHAR_FEMALE
     jr z, .hudF
+    cp CHAR_RUUSU
+    jr z, .hudR
+    cp CHAR_MARA
+    jr z, .hudMara
     ld de, StrOptNB
+    jr .printHudHero
+.hudR:
+    ld de, StrOptRuusu
+    jr .printHudHero
+.hudMara:
+    ld de, StrOptMara
     jr .printHudHero
 .hudM:
     ld de, StrOptMale
@@ -4150,11 +4418,15 @@ StrSelectHeader2:
     db "M / F / NB CLASS", 0
 
 StrOptMale:
-    db "M:  ARIA", 0
+    db "M:  ARIA  ", 0
 StrOptFemale:
     db "F:  SAKURA", 0
 StrOptNB:
-    db "NB: ORION", 0
+    db "NB: ORION ", 0
+StrOptRuusu:
+    db "NB: RUUSU ", 0
+StrOptMara:
+    db "GF: MARA  ", 0
 
 StrDescM1:
     db "CLASS: KNIGHT (M)", 0
@@ -4176,6 +4448,20 @@ StrDescNB2:
     db "HP:30 AT:09 DF:04", 0
 StrDescNB3:
     db "ASTRAL HERO     ", 0
+
+StrDescR1:
+    db "CLASS: TIGER (NB)", 0
+StrDescR2:
+    db "HP:32 AT:10 DF:04", 0
+StrDescR3:
+    db "TIGER HOOD HERO ", 0
+
+StrDescMara1:
+    db "CLASS: BARD  (GF)", 0
+StrDescMara2:
+    db "HP:30 AT:09 DF:04", 0
+StrDescMara3:
+    db "WEAVE SONG HERO ", 0
 
 StrReady1:
     db "SELECTED HERO:", 0
@@ -4228,6 +4514,30 @@ StrOrionL4:
     db "LET'S FIND", 0
 StrOrionL5:
     db "OURS!", $2F, 0
+
+StrHeaderRuusu:
+    db $09, "RUUSU", $09, 0
+StrRuusuL1:
+    db $2F, "RAWR! WITH MY", 0
+StrRuusuL2:
+    db "TIGER HOOD AND", 0
+StrRuusuL3:
+    db "OUR THREADS OF", 0
+StrRuusuL4:
+    db "AMITY, NOTHING", 0
+StrRuusuL5:
+    db "CAN STOP US!", $2F, 0
+
+StrHeaderMara:
+    db $09, "MARA", $09, 0
+StrMaraL1:
+    db $2F, "THE THREADS SING", 0
+StrMaraL2:
+    db "TO MY HEART...", 0
+StrMaraL3:
+    db "LET'S WEAVE A", 0
+StrMaraL4:
+    db "NEW TOMORROW!", $2F, 0
 
 StrHeaderGaiusJP:
     db $09, $0E, $0F, $28, $09, 0 ; ♦ガイア♦
@@ -4373,6 +4683,7 @@ wFrameCounter:  ds 1
 wJoyHeld:       ds 1
 wJoyPressed:    ds 1
 wSelectedChar:  ds 1
+wSelectScroll:  ds 1 ; Top visible character index (0..1) in 4-row Character Select list
 wSpriteY:       ds 1
 wSpriteX:       ds 1
 wSpriteTile:    ds 1

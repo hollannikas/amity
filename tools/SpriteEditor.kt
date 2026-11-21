@@ -253,6 +253,10 @@ class AssetsIncDocument(val file: File) {
                         copyTo("SpritesOrionTiles", tileIdx - 0xE0)
                         copyTo("SelectScreenHeroSprites", 16 + (tileIdx - 0xE0))
                     }
+                    in 0xE8..0xEF -> {
+                        copyTo("SpritesRuusuTiles", tileIdx - 0xE8)
+                        copyTo("SelectScreenHeroSprites", 24 + (tileIdx - 0xE8))
+                    }
                     in 0xF0..0xF3 -> copyTo("CustomSpritesTiles", tileIdx - 0xF0)
                 }
             }
@@ -587,7 +591,7 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             npcEnemyItems.add(SpriteGroupItem("$rawCmt (Custom #$i, 16x16)", "CustomSpritesTiles", i * 4, 2, 2, true))
         }
         // Also scan any user-created Sprite*Tiles sections!
-        val builtInSpriteSecs = setOf("SpritesAriaTiles", "SpritesSakuraTiles", "SpritesOrionTiles", "CustomSpritesTiles", "SelectScreenHeroSprites")
+        val builtInSpriteSecs = setOf("SpritesAriaTiles", "SpritesSakuraTiles", "SpritesOrionTiles", "SpritesRuusuTiles", "SpritesMaraTiles", "CustomSpritesTiles", "SelectScreenHeroSprites")
         for ((secName, list) in doc.sectionTiles) {
             if (secName.startsWith("Sprite") && secName !in builtInSpriteSecs && list.size >= 4) {
                 val count = list.size / 4
@@ -650,13 +654,15 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             SpriteGroupItem("Aria Portrait (80x64, 10x8 tiles)", "PortraitAriaTiles", 0, 10, 8, false),
             SpriteGroupItem("Sakura Portrait (80x64, 10x8 tiles)", "PortraitSakuraTiles", 0, 10, 8, false),
             SpriteGroupItem("Orion Portrait (80x64, 10x8 tiles)", "PortraitOrionTiles", 0, 10, 8, false),
+            SpriteGroupItem("Ruusu Portrait (80x64, 10x8 tiles)", "PortraitRuusuTiles", 0, 10, 8, false),
+            SpriteGroupItem("Mara Portrait (80x64, 10x8 tiles)", "PortraitMaraTiles", 0, 10, 8, false),
             SpriteGroupItem("Gaius Portrait (80x64, 10x8 tiles)", "PortraitGaiusTiles", 0, 10, 8, false),
             SpriteGroupItem("Boss Terf Portrait (80x64, 10x8 tiles)", "PortraitTerfTiles", 0, 10, 8, false),
             SpriteGroupItem("Bob (Bearded) Portrait (80x64, 10x8 tiles)", "PortraitBobBeardedTiles", 0, 10, 8, false),
             SpriteGroupItem("Bob (She/Her) Portrait (80x64, 10x8 tiles)", "PortraitBobFemTiles", 0, 10, 8, false)
         )
         val builtInPortraits = setOf(
-            "PortraitAriaTiles", "PortraitSakuraTiles", "PortraitOrionTiles",
+            "PortraitAriaTiles", "PortraitSakuraTiles", "PortraitOrionTiles", "PortraitRuusuTiles", "PortraitMaraTiles",
             "PortraitGaiusTiles", "PortraitMateriaTiles", "PortraitTerfTiles",
             "PortraitBobBeardedTiles", "PortraitBobFemTiles"
         )
@@ -708,6 +714,8 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             CategoryDef("Hero Sprites: M - ARIA (16x16)", charSpritesForSection("Aria", "SpritesAriaTiles")),
             CategoryDef("Hero Sprites: F - SAKURA (16x16)", charSpritesForSection("Sakura", "SpritesSakuraTiles")),
             CategoryDef("Hero Sprites: NB - ORION (16x16)", charSpritesForSection("Orion", "SpritesOrionTiles")),
+            CategoryDef("Hero Sprites: NB - RUUSU (16x16)", charSpritesForSection("Ruusu", "SpritesRuusuTiles")),
+            CategoryDef("Hero Sprites: GF - MARA (16x16)", charSpritesForSection("Mara", "SpritesMaraTiles")),
             CategoryDef("Overworld NPC, Enemy & Custom Sprites (16x16)", npcEnemyItems),
             CategoryDef("Inventory Item Sprites (16x16)", itemSpriteItems),
             CategoryDef("2.5D Overworld Map Metatiles (16x16)", mapMetatileItems),
