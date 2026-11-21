@@ -667,6 +667,34 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             }
         }
 
+        // Inventory Item Sprites (16x16) - reads ItemSpritesTiles and any Item*Tiles sections
+        val itemSpriteList = doc.sectionTiles["ItemSpritesTiles"] ?: emptyList()
+        val numItemSprites = itemSpriteList.size / 4
+        val itemSpriteItems = mutableListOf<SpriteGroupItem>()
+        for (i in 0 until numItemSprites) {
+            val rawCmt = stripCoordSuffix(itemSpriteList[i * 4].comment.ifEmpty { "Item ${i + 1}" })
+            val vramTile = 0xD0 + i * 4
+            itemSpriteItems.add(
+                SpriteGroupItem(
+                    String.format("%s (Item ID %d, VRAM \$%02X, 16x16)", rawCmt, i + 1, vramTile),
+                    "ItemSpritesTiles",
+                    i * 4,
+                    2,
+                    2,
+                    true
+                )
+            )
+        }
+        for ((secName, list) in doc.sectionTiles) {
+            if (secName.startsWith("Item") && secName != "ItemSpritesTiles" && list.size >= 4) {
+                val count = list.size / 4
+                for (i in 0 until count) {
+                    val cmt = stripCoordSuffix(list[i * 4].comment.ifEmpty { "$secName #$i" })
+                    itemSpriteItems.add(SpriteGroupItem("$cmt [$secName, 16x16]", secName, i * 4, 2, 2, true))
+                }
+            }
+        }
+
         val all8x8Tiles = (0x00..0xFF).map { tid ->
             val comment = doc.sectionTiles["TilesetData"]?.getOrNull(tid)?.comment ?: "Tile \$${String.format("%02X", tid)}"
             val isSpr = tid >= 0xD0
@@ -681,6 +709,7 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             CategoryDef("Hero Sprites: F - SAKURA (16x16)", charSpritesForSection("Sakura", "SpritesSakuraTiles")),
             CategoryDef("Hero Sprites: NB - ORION (16x16)", charSpritesForSection("Orion", "SpritesOrionTiles")),
             CategoryDef("Overworld NPC, Enemy & Custom Sprites (16x16)", npcEnemyItems),
+            CategoryDef("Inventory Item Sprites (16x16)", itemSpriteItems),
             CategoryDef("2.5D Overworld Map Metatiles (16x16)", mapMetatileItems),
             CategoryDef("Battle Monster Graphics (32x32 & 64x48)", battleItems),
             CategoryDef("Dialogue Portraits (80x64)", portraitItems),
@@ -723,12 +752,15 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
         }
     }
 
-    /** Dialog to add a brand-new Sprite (16x16 Overworld/Hero/Custom Bank, 32x32 Battle Monster, or 80x64 Portrait) */
+    /** Dialog to add a brand-new Sprite (16x16 Inventory Item, Overworld/Hero/Custom Bank, 32x32 Battle Monster, or 80x64 Portrait) */
     private fun promptAddNewSprite() {
         writeCanvasBackToDocument()
 
-        val nameField = JTextField("NewSprite", 18)
+        val nextItemId = ((doc.sectionTiles["ItemSpritesTiles"]?.size ?: 0) / 4) + 1
+        val isInvCat = (categoryCombo.selectedItem as? CategoryDef)?.name?.contains("Inventory Item") == true
+        val nameField = JTextField(if (isInvCat) "Item $nextItemId: Health Potion" else "NewSprite", 18)
         val typeOptions = arrayOf(
+            "16x16 Inventory Item Sprite (adds to ItemSpritesTiles)",
             "16x16 Overworld / Custom Sprite (adds to CustomSpritesTiles)",
             "16x16 New Named Sprite Bank (creates Sprite<Name>Tiles: in assets.inc)",
             "16x16 Extra Frame for M: ARIA (adds to SpritesAriaTiles)",
@@ -738,17 +770,18 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             "80x64 Dialogue Portrait (creates Portrait<Name>Tiles: in assets.inc)"
         )
         val typeCombo = JComboBox(typeOptions)
+        typeCombo.selectedIndex = if (isInvCat) 0 else 1
         val cloneChk = JCheckBox("Initialize with copy of current canvas pixels", false)
 
         val panel = JPanel(GridLayout(0, 1, 4, 4))
-        panel.add(JLabel("Sprite Name / Label:"))
+        panel.add(JLabel("Sprite / Item Name:"))
         panel.add(nameField)
         panel.add(JLabel("Sprite Type & Destination:"))
         panel.add(typeCombo)
         panel.add(cloneChk)
 
         val res = JOptionPane.showConfirmDialog(
-            this, panel, "Add New Sprite to src/assets.inc",
+            this, panel, "Add New Sprite / Inventory Item to src/assets.inc",
             JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
         )
         if (res != JOptionPane.OK_OPTION) return
@@ -760,12 +793,13 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
         val initPx = if (cloneChk.isSelected) pixels else null
 
         val (targetSection, tw, th, comment) = when (typeCombo.selectedIndex) {
-            0 -> Quad("CustomSpritesTiles", 2, 2, "Custom Sprite: $rawName")
-            1 -> Quad("Sprite${cleanId}Tiles", 2, 2, "$rawName")
-            2 -> Quad("SpritesAriaTiles", 2, 2, "Aria $rawName")
-            3 -> Quad("SpritesSakuraTiles", 2, 2, "Sakura $rawName")
-            4 -> Quad("SpritesOrionTiles", 2, 2, "Orion $rawName")
-            5 -> Quad("Battle${cleanId}Tiles", 4, 4, "Battle $rawName")
+            0 -> Quad("ItemSpritesTiles", 2, 2, if (rawName.startsWith("Item", ignoreCase = true)) rawName else "Item $nextItemId: $rawName")
+            1 -> Quad("CustomSpritesTiles", 2, 2, "Custom Sprite: $rawName")
+            2 -> Quad("Sprite${cleanId}Tiles", 2, 2, "$rawName")
+            3 -> Quad("SpritesAriaTiles", 2, 2, "Aria $rawName")
+            4 -> Quad("SpritesSakuraTiles", 2, 2, "Sakura $rawName")
+            5 -> Quad("SpritesOrionTiles", 2, 2, "Orion $rawName")
+            6 -> Quad("Battle${cleanId}Tiles", 4, 4, "Battle $rawName")
             else -> Quad("Portrait${cleanId}Tiles", 10, 8, "Portrait $rawName")
         }
 

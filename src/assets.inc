@@ -1116,6 +1116,34 @@ CustomSpritesTiles:
     db $1E, $FE, $F8, $FC, $AC, $FE, $D6, $FF, $AA, $FF, $FE, $FF, $90, $F0, $E0, $E0 ; NPC Bob Dress ($F0-$F3) (1,1)
 CustomSpritesTilesEnd:
 
+ItemSpritesTiles:
+    db $00, $00, $0C, $0C, $12, $1E, $25, $3B, $27, $39, $13, $1D, $09, $0F, $07, $07 ; Item 1: Silk Dress (0,0)
+    db $00, $00, $30, $30, $48, $78, $A4, $DC, $E4, $9C, $C8, $B8, $90, $F0, $E0, $E0 ; Item 1: Silk Dress (1,0)
+    db $0D, $0F, $19, $1F, $33, $3F, $25, $3F, $6B, $7F, $55, $7F, $7F, $7F, $2A, $55 ; Item 1: Silk Dress (0,1)
+    db $B0, $F0, $98, $F8, $CC, $FC, $A4, $FC, $D6, $FE, $AA, $FE, $FE, $FE, $54, $AA ; Item 1: Silk Dress (1,1)
+ItemSpritesTilesEnd:
+
+InvGridBorderTiles:
+    ; Unselected Rounded-Edge Cell Border ($80..$87: TL, T, TR, L, R, BL, B, BR)
+    db $00, $00, $0F, $0F, $10, $1F, $2F, $20, $48, $40, $48, $40, $48, $40, $48, $40 ; Tile $80: Rounded Cell TL
+    db $00, $00, $FF, $FF, $00, $FF, $FF, $00, $00, $00, $00, $00, $00, $00, $00, $00 ; Tile $81: Rounded Cell T
+    db $00, $00, $F0, $F0, $08, $F8, $F4, $04, $12, $02, $12, $02, $12, $02, $12, $02 ; Tile $82: Rounded Cell TR
+    db $48, $40, $48, $40, $48, $40, $48, $40, $48, $40, $48, $40, $48, $40, $48, $40 ; Tile $83: Rounded Cell L
+    db $12, $02, $12, $02, $12, $02, $12, $02, $12, $02, $12, $02, $12, $02, $12, $02 ; Tile $84: Rounded Cell R
+    db $48, $40, $48, $40, $48, $40, $48, $40, $2F, $20, $10, $1F, $0F, $0F, $00, $00 ; Tile $85: Rounded Cell BL
+    db $00, $00, $00, $00, $00, $00, $00, $00, $FF, $00, $00, $FF, $FF, $FF, $00, $00 ; Tile $86: Rounded Cell B
+    db $12, $02, $12, $02, $12, $02, $12, $02, $F4, $04, $08, $F8, $F0, $F0, $00, $00 ; Tile $87: Rounded Cell BR
+    ; Selected Highlighted Rounded-Edge Cell Border ($88..$8F: TL, T, TR, L, R, BL, B, BR)
+    db $1F, $1F, $3F, $3F, $70, $7F, $6F, $6F, $DF, $D0, $D8, $D8, $D8, $D8, $D8, $D8 ; Tile $88: Selected Cell TL
+    db $FF, $FF, $FF, $FF, $00, $FF, $FF, $FF, $FF, $00, $00, $00, $00, $00, $00, $00 ; Tile $89: Selected Cell T
+    db $F8, $F8, $FC, $FC, $0E, $FE, $F6, $F6, $FB, $0B, $1B, $1B, $1B, $1B, $1B, $1B ; Tile $8A: Selected Cell TR
+    db $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8, $D8 ; Tile $8B: Selected Cell L
+    db $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B, $1B ; Tile $8C: Selected Cell R
+    db $D8, $D8, $D8, $D8, $D8, $D8, $DF, $D0, $6F, $6F, $70, $7F, $3F, $3F, $1F, $1F ; Tile $8D: Selected Cell BL
+    db $00, $00, $00, $00, $00, $00, $FF, $00, $FF, $FF, $00, $FF, $FF, $FF, $FF, $FF ; Tile $8E: Selected Cell B
+    db $1B, $1B, $1B, $1B, $1B, $1B, $FB, $0B, $F6, $F6, $0E, $FE, $FC, $FC, $F8, $F8 ; Tile $8F: Selected Cell BR
+InvGridBorderTilesEnd:
+
 BattleFiendTiles:
     db $00, $00, $00, $00, $01, $01, $02, $03, $05, $06, $0B, $0C, $0B, $0D, $17, $19 ; Tile $70: Monster (0,0)
     db $0F, $0F, $70, $7F, $8F, $F0, $7F, $8F, $F0, $70, $88, $88, $1C, $1C, $1C, $1C ; Tile $71: Monster (1,0)

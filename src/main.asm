@@ -12,6 +12,12 @@ DEF STATE_OVERWORLD   EQU 2
 DEF STATE_DIALOGUE    EQU 3
 DEF STATE_BATTLE      EQU 4
 DEF STATE_GAME_OVER   EQU 5
+DEF STATE_INVENTORY   EQU 6
+
+; Inventory Item IDs & Grid Constants
+DEF ITEM_NONE         EQU 0
+DEF ITEM_SILK_DRESS   EQU 1
+DEF INV_SLOTS         EQU 8 ; 4 columns x 2 rows grid of 16x16 items
 
 ; Character Classes / Genders
 DEF CHAR_MALE         EQU 0
@@ -129,6 +135,8 @@ MainLoop:
     jr z, .doBattle
     cp STATE_GAME_OVER
     jr z, .doGameOver
+    cp STATE_INVENTORY
+    jr z, .doInventory
     jr MainLoop
 
 .doSplash:
@@ -153,6 +161,10 @@ MainLoop:
 
 .doGameOver:
     call UpdateGameOver
+    jr MainLoop
+
+.doInventory:
+    call UpdateInventory
     jr MainLoop
 
 ; ===========================================================================
@@ -601,6 +613,13 @@ InitOverworld:
     xor a
     ld [wBobQuestState], a ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
     ld [wHasDress], a      ; 0 = Dress in chest, 1 = In inventory, 2 = Given to Bob
+    ld [wInvCursor], a
+    ld hl, wInventory
+    ld b, INV_SLOTS
+.clearInvLoop:
+    ld [hl+], a
+    dec b
+    jr nz, .clearInvLoop
 
     ; Initialize 9 Overworld Enemies:
     ; Index 0 = EVIL TERF (slow, high-HP, high-ATK boss mob at X=64, Y=144)
@@ -912,6 +931,16 @@ UpdateOverworld:
     cp STATE_DIALOGUE
     ret z
     call CheckChestInteraction
+    ld a, [wGameState]
+    cp STATE_DIALOGUE
+    ret z
+
+    ; If A (or SELECT) was pressed and no NPC/chest interaction triggered, open the Inventory Screen!
+    ld a, [wJoyPressed]
+    and PADF_A | PADF_SELECT
+    ret z
+    call PlaySFXConfirm
+    call InitInventory
     ret
 
 ; Check proximity to NPC Materia and trigger popup portrait & text box
@@ -1375,6 +1404,9 @@ UpdateNPCDialogue:
 
 .transformBobToShe:
     ; Bob puts on the Silk Dress, breaking the weave and becoming a she!
+    ; Remove the Silk Dress from the player's inventory
+    ld a, ITEM_SILK_DRESS
+    call RemoveItemFromInventory
     ld a, 2
     ld [wBobQuestState], a
     ld [wHasDress], a
@@ -1627,6 +1659,9 @@ CheckChestInteraction:
     jr nz, .alreadyOpened
     ld a, 1
     ld [wHasDress], a
+    ; Add the Silk Dress to the player's inventory!
+    ld a, ITEM_SILK_DRESS
+    call AddItemToInventory
     ld a, 6 ; Page 6 = Found the Silk Dress!
     ld [wDialogPage], a
     call InitVictoryJingle
@@ -1643,6 +1678,332 @@ CheckChestInteraction:
     ld [wGameState], a
     ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
+    ret
+
+; ===========================================================================
+; Inventory System (4x2 Rounded-Edge Grid of 16x16 Item Sprites)
+; ===========================================================================
+
+; Add item ID in A (1..N) to first empty slot in wInventory (0..7)
+AddItemToInventory:
+    ld b, a
+    ld hl, wInventory
+    ld c, INV_SLOTS
+.findEmpty:
+    ld a, [hl]
+    or a
+    jr z, .storeItem
+    inc hl
+    dec c
+    jr nz, .findEmpty
+    ret
+.storeItem:
+    ld [hl], b
+    ret
+
+; Remove first occurrence of item ID in A from wInventory (0..7) and shift remaining items left
+RemoveItemFromInventory:
+    ld b, a
+    ld hl, wInventory
+    ld c, INV_SLOTS
+.findMatch:
+    ld a, [hl]
+    cp b
+    jr z, .shiftLeft
+    inc hl
+    dec c
+    jr nz, .findMatch
+    ret
+.shiftLeft:
+    dec c
+    jr z, .clearLast
+    ld d, h
+    ld e, l
+    inc de
+    ld a, [de]
+    ld [hl+], a
+    jr .shiftLeft
+.clearLast:
+    xor a
+    ld [hl], a
+    ret
+
+InitInventory:
+    call DisableLCD
+    call ClearBGMap0
+    call ClearShadowOAM
+
+    xor a
+    ld [rSCX], a
+    ld [rSCY], a
+
+    ; Load Rounded-Edge Grid Cell Border Tiles ($80..$8F) into VRAM $8800
+    ld hl, InvGridBorderTiles
+    ld de, $8800
+    ld bc, InvGridBorderTilesEnd - InvGridBorderTiles
+    call CopyData
+
+    ; Load 16x16 Inventory Item Sprites ($D0..) into VRAM $8D00
+    ld hl, ItemSpritesTiles
+    ld de, $8D00
+    ld bc, ItemSpritesTilesEnd - ItemSpritesTiles
+    call CopyData
+
+    ; Top Header Box (X=0, Y=0, W=20, H=3)
+    ld b, 0
+    ld c, 0
+    ld d, 20
+    ld e, 3
+    call DrawDialogBox
+    ld hl, _SCRN0 + (1 * 32) + 3
+    ld de, StrInvTitle
+    call PrintString
+
+    ; Bottom Single-Row Item Name Box (X=0, Y=15, W=20, H=3 -> single text row on Row 16!)
+    ld b, 0
+    ld c, 15
+    ld d, 20
+    ld e, 3
+    call DrawDialogBox
+
+    ; Draw the 4x2 Rounded-Edge Grid, 16x16 Item Sprites, and Selected Item Name
+    call DrawInventoryGrid
+    call RenderInventorySprites
+    call DrawSelectedItemName
+
+    ld a, STATE_INVENTORY
+    ld [wGameState], a
+
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld [rLCDC], a
+    ret
+
+UpdateInventory:
+    ; D-Pad navigation across the 4x2 grid (slots 0..7)
+    ld a, [wJoyPressed]
+    bit 4, a ; PADF_RIGHT
+    jr nz, .moveRight
+    bit 5, a ; PADF_LEFT
+    jr nz, .moveLeft
+    bit 7, a ; PADF_DOWN
+    jr nz, .moveUpDown
+    bit 6, a ; PADF_UP
+    jr nz, .moveUpDown
+
+    ; Close Inventory on B, A, START, or SELECT (no item action button yet)
+    and PADF_B | PADF_A | PADF_START | PADF_SELECT
+    ret z
+    call PlaySFXConfirm
+    call EnterOverworldMap
+    ret
+
+.moveRight:
+    ld a, [wInvCursor]
+    inc a
+    and 7
+    jr .updateCursor
+
+.moveLeft:
+    ld a, [wInvCursor]
+    dec a
+    and 7
+    jr .updateCursor
+
+.moveUpDown:
+    ld a, [wInvCursor]
+    xor 4 ; Toggle between Row 0 (0..3) and Row 1 (4..7)
+
+.updateCursor:
+    ld [wInvCursor], a
+    call PlaySFXCursor
+    ; Redraw rounded grid cells & bottom item name safely inside VBlank
+    call DisableLCD
+    call DrawInventoryGrid
+    call DrawSelectedItemName
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld [rLCDC], a
+    ret
+
+; Draw all 8 Rounded-Edge 4x4 Grid Cells (4 columns x 2 rows)
+; Row 0 (slots 0..3) at Y=4, X=2, 6, 10, 14
+; Row 1 (slots 4..7) at Y=9, X=2, 6, 10, 14
+DrawInventoryGrid:
+    ld c, 0 ; Slot index 0..7
+.slotLoop:
+    push bc
+    ; Compute X = 2 + ((c & 3) * 4)
+    ld a, c
+    and 3
+    add a
+    add a
+    add 2
+    ld b, a ; b = Tile X
+
+    ; Compute Y = 4 for Row 0 (c < 4), or 9 for Row 1 (c >= 4)
+    ld a, c
+    bit 2, a
+    ld a, 4
+    jr z, .gotY
+    ld a, 9
+.gotY:
+    ld d, a ; d = Tile Y
+
+    ; Choose rounded border tile base: $88 if selected (c == wInvCursor), else $80
+    ld a, [wInvCursor]
+    cp c
+    ld e, $80
+    jr nz, .drawCell
+    ld e, $88
+.drawCell:
+    call DrawRoundedGridCell
+    pop bc
+    inc c
+    ld a, c
+    cp INV_SLOTS
+    jr c, .slotLoop
+    ret
+
+; Draw a 4x4 Rounded-Edge Cell at Tile X = b, Tile Y = d, Base Tile = e ($80 or $88)
+; Base+0=TL, Base+1=T, Base+2=TR, Base+3=L, Base+4=R, Base+5=BL, Base+6=B, Base+7=BR
+DrawRoundedGridCell:
+    ; Compute HL = _SCRN0 + d*32 + b
+    ld l, d
+    ld h, 0
+    add hl, hl ; *2
+    add hl, hl ; *4
+    add hl, hl ; *8
+    add hl, hl ; *16
+    add hl, hl ; *32
+    ld a, b
+    add l
+    ld l, a
+    ld a, h
+    adc $98
+    ld h, a
+
+    ; Row 0 of cell: TL, T, T, TR
+    ld a, e
+    ld [hl+], a ; TL
+    inc a
+    ld [hl+], a ; T
+    ld [hl+], a ; T
+    inc a
+    ld [hl], a  ; TR
+
+    ; Row 1 of cell: L, Blank, Blank, R
+    ld bc, 29
+    add hl, bc
+    ld a, e
+    add 3
+    ld [hl+], a ; L
+    xor a
+    ld [hl+], a ; Interior (0,0)
+    ld [hl+], a ; Interior (1,0)
+    ld a, e
+    add 4
+    ld [hl], a  ; R
+
+    ; Row 2 of cell: L, Blank, Blank, R
+    ld bc, 29
+    add hl, bc
+    ld a, e
+    add 3
+    ld [hl+], a ; L
+    xor a
+    ld [hl+], a ; Interior (0,1)
+    ld [hl+], a ; Interior (1,1)
+    ld a, e
+    add 4
+    ld [hl], a  ; R
+
+    ; Row 3 of cell: BL, B, B, BR
+    ld bc, 29
+    add hl, bc
+    ld a, e
+    add 5
+    ld [hl+], a ; BL
+    inc a
+    ld [hl+], a ; B
+    ld [hl+], a ; B
+    inc a
+    ld [hl], a  ; BR
+    ret
+
+; Render 16x16 Item Sprites inside their corresponding 4x4 Rounded Grid Cells
+RenderInventorySprites:
+    call ClearShadowOAM
+    ld c, 0 ; Slot index 0..7
+.sprLoop:
+    ld b, 0
+    ld hl, wInventory
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .nextSlot ; Empty slot
+
+    ; Compute Sprite Tile = $D0 + ((item_id - 1) * 4)
+    dec a
+    add a
+    add a
+    add $D0
+    ld [wSpriteTile], a
+
+    ; Compute Screen X = ((2 + (c & 3)*4 + 1) * 8) + 8 = 32 + (c & 3)*32
+    ld a, c
+    and 3
+    swap a ; *16
+    add a  ; *32
+    add 32
+    ld [wSpriteX], a
+
+    ; Compute Screen Y = 56 for Row 0 (Y=4+1 -> 5*8+16=56), or 96 for Row 1 (Y=9+1 -> 10*8+16=96)
+    ld a, c
+    bit 2, a
+    ld a, 56
+    jr z, .gotSprY
+    ld a, 96
+.gotSprY:
+    ld [wSpriteY], a
+
+    ; Place 16x16 metasprite at OAM slot (c * 4)
+    push bc
+    ld a, c
+    add a
+    add a
+    call SetMetaSprite16x16
+    pop bc
+
+.nextSlot:
+    inc c
+    ld a, c
+    cp INV_SLOTS
+    jr c, .sprLoop
+    ret
+
+; Print the name of the currently selected item on the single bottom row (Row 16)
+DrawSelectedItemName:
+    ld hl, _SCRN0 + (16 * 32) + 1
+    call ClearDialogLine
+
+    ld a, [wInvCursor]
+    ld c, a
+    ld b, 0
+    ld hl, wInventory
+    add hl, bc
+    ld a, [hl]
+    cp ITEM_SILK_DRESS
+    jr z, .nameSilkDress
+
+    ; Empty slot
+    ld hl, _SCRN0 + (16 * 32) + 5
+    ld de, StrItemEmpty
+    call PrintString
+    ret
+
+.nameSilkDress:
+    ld hl, _SCRN0 + (16 * 32) + 5
+    ld de, StrItemSilkDress
+    call PrintString
     ret
 
 ; Show Boss TERF 80x64 Portrait & Taunt Dialogue before starting Boss Battle!
@@ -3944,6 +4305,13 @@ StrChestEmptyL1:
 StrChestEmptyL2:
     db "CHEST IS EMPTY.", 0
 
+StrInvTitle:
+    db "* INVENTORY *", 0
+StrItemEmpty:
+    db "- EMPTY -", 0
+StrItemSilkDress:
+    db "SILK DRESS", 0
+
 StrEnemyName:
     db "* SHADOW FIEND *", 0
 StrTerfName:
@@ -4020,6 +4388,8 @@ wBobWorldX:     ds 1
 wBobWorldY:     ds 1
 wBobQuestState: ds 1 ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
 wHasDress:      ds 1 ; 0 = Dress in chest, 1 = Found in chest, 2 = Given to Bob
+wInvCursor:     ds 1 ; Selected inventory grid slot (0..7)
+wInventory:     ds INV_SLOTS ; 8 inventory slots (0 = empty, 1 = Silk Dress, etc.)
 wEnemyX:        ds 9 ; 0 = Evil Terf, 1..8 = 8 Shadow Fiends
 wEnemyY:        ds 9
 wEnemyAlive:    ds 9
