@@ -593,6 +593,15 @@ InitOverworld:
     ld a, 72
     ld [wNPCWorldY], a
 
+    ; Quest Giver NPC Bob stands in Upper Village Plaza near the East House (X=152, Y=72)
+    ld a, 152
+    ld [wBobWorldX], a
+    ld a, 72
+    ld [wBobWorldY], a
+    xor a
+    ld [wBobQuestState], a ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
+    ld [wHasDress], a      ; 0 = Dress in chest, 1 = In inventory, 2 = Given to Bob
+
     ; Initialize 9 Overworld Enemies:
     ; Index 0 = EVIL TERF (slow, high-HP, high-ATK boss mob at X=64, Y=144)
     ; Indices 1..8 = 8 SHADOW FIENDS patrolling across the 256x256 map!
@@ -626,7 +635,7 @@ InitialEnemyX:
     db 192 ; 5: Shadow Fiend #5 (Eastern Crossroad)
     db 40  ; 6: Shadow Fiend #6 (Northwest Forest Grove)
     db 208 ; 7: Shadow Fiend #7 (Northeast Forest Grove)
-    db 184 ; 8: Shadow Fiend #8 (Southeast Riverbank)
+    db 204 ; 8: Shadow Fiend #8 (Southeast Riverbank)
 
 InitialEnemyY:
     db 144 ; 0: EVIL TERF
@@ -650,8 +659,15 @@ EnterOverworldMap:
     ; Load Selected Character's 4-Directional Sprite Bank (32 tiles = $D0..$EF) into VRAM $8D00
     call LoadSelectedPlayerSprites
 
-    ; Load Custom Sprite 0 ($F0..$F3) into VRAM $8F00 and extensible MapMetatilesData into VRAM $8800 ($80..$CF)
+    ; Load NPC Bob's Overworld Sprite ($F0..$F3) into VRAM $8F00:
+    ; - Before dress (wBobQuestState < 2): CustomSpritesTiles + 0  (Bearded man sprite)
+    ; - After dress  (wBobQuestState == 2): CustomSpritesTiles + 64 (Woman in dress sprite)
     ld hl, CustomSpritesTiles
+    ld a, [wBobQuestState]
+    cp 2
+    jr nz, .copyBobSprite
+    ld hl, CustomSpritesTiles + (4 * 16)
+.copyBobSprite:
     ld de, $8F00
     ld bc, 4 * 16
     call CopyData
@@ -710,6 +726,15 @@ LoadOverworldMap:
 .colLoop:
     ld a, [de]
     inc de
+    ; If metatile 6 (Treasure Chest) and chest has already been opened (wHasDress != 0), use metatile 7 (Open Chest)
+    cp 6
+    jr nz, .notOpenedChest
+    ld a, [wHasDress]
+    or a
+    ld a, 6
+    jr z, .notOpenedChest
+    ld a, 7
+.notOpenedChest:
     ; Calculate base tile = $80 + a*4
     sla a
     sla a
@@ -877,10 +902,16 @@ UpdateOverworld:
     cp STATE_BATTLE
     ret z
 
-    ; Check NPC Interaction:
-    ; If player is near NPC Materia (|PlayerX - NPCX| < 20 and |PlayerY - NPCY| < 20)
-    ; and presses A (or touches NPC directly within 12px), open the Aretha II Portrait Dialogue!
+    ; Check NPC & Quest Interactions (Gaius, Bob, and the hidden Treasure Chest)
     call CheckNPCInteraction
+    ld a, [wGameState]
+    cp STATE_DIALOGUE
+    ret z
+    call CheckBobInteraction
+    ld a, [wGameState]
+    cp STATE_DIALOGUE
+    ret z
+    call CheckChestInteraction
     ret
 
 ; Check proximity to NPC Materia and trigger popup portrait & text box
@@ -1127,6 +1158,16 @@ DrawNPCDialoguePage:
 .page1:
     cp 2
     jr z, .pageTerf
+    cp 3
+    jr z, .pageBobRequest
+    cp 4
+    jp z, .pageBobTryDress
+    cp 5
+    jp z, .pageBobFreed
+    cp 6
+    jp z, .pageChestFound
+    cp 7
+    jp z, .pageChestEmpty
 
     ; Page 1: NPC GAIUS (♦ガイア♦ / GAIUS) portrait & guidance from uploaded image!
     ld hl, _SCRN0 + (9 * 32) + 7
@@ -1173,6 +1214,104 @@ DrawNPCDialoguePage:
     call PrintString
     ret
 
+.pageBobRequest:
+    ; Page 3: Bearded Bob asking for the Silk Dress hidden in a treasure chest
+    ld hl, _SCRN0 + (9 * 32) + 4
+    ld de, StrHeaderBobBeard
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrBobReqL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrBobReqL2
+    call PrintString
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrBobReqL3
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrBobReqL4
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrBobReqL5
+    call PrintString
+    ld hl, _SCRN0 + (16 * 32) + 2
+    ld de, StrBobReqL6
+    call PrintString
+    ret
+
+.pageBobTryDress:
+    ; Page 4: Bearded Bob receiving the Silk Dress and trying it on
+    ld hl, _SCRN0 + (9 * 32) + 4
+    ld de, StrHeaderBobBeard
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrBobTryL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrBobTryL2
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrBobTryL3
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrBobTryL4
+    call PrintString
+    ret
+
+.pageBobFreed:
+    ; Page 5: Bob freed from the weave — she is now a woman!
+    ld hl, _SCRN0 + (9 * 32) + 3
+    ld de, StrHeaderBobFem
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrBobFreeL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrBobFreeL2
+    call PrintString
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrBobFreeL3
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrBobFreeL4
+    call PrintString
+    ld hl, _SCRN0 + (16 * 32) + 2
+    ld de, StrBobFreeL5
+    call PrintString
+    ret
+
+.pageChestFound:
+    ; Page 6: Found the Silk Dress in the Treasure Chest!
+    ld hl, _SCRN0 + (9 * 32) + 2
+    ld de, StrHeaderChest
+    call PrintString
+    ld hl, _SCRN0 + (11 * 32) + 2
+    ld de, StrChestFoundL1
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrChestFoundL2
+    call PrintString
+    ld hl, _SCRN0 + (14 * 32) + 2
+    ld de, StrChestFoundL3
+    call PrintString
+    ld hl, _SCRN0 + (15 * 32) + 2
+    ld de, StrChestFoundL4
+    call PrintString
+    ret
+
+.pageChestEmpty:
+    ; Page 7: Treasure Chest already opened
+    ld hl, _SCRN0 + (9 * 32) + 2
+    ld de, StrHeaderChest
+    call PrintString
+    ld hl, _SCRN0 + (12 * 32) + 2
+    ld de, StrChestEmptyL1
+    call PrintString
+    ld hl, _SCRN0 + (13 * 32) + 2
+    ld de, StrChestEmptyL2
+    call PrintString
+    ret
+
 ClearDialogLine:
     ld b, 18
     xor a
@@ -1208,6 +1347,8 @@ UpdateNPCDialogue:
     ld a, [wDialogPage]
     cp 2
     jr z, .startTerfBattleFromDialog
+    cp 4
+    jr z, .transformBobToShe
     or a
     jr nz, .closeDialog
 
@@ -1232,6 +1373,23 @@ UpdateNPCDialogue:
     ld [rLCDC], a
     ret
 
+.transformBobToShe:
+    ; Bob puts on the Silk Dress, breaking the weave and becoming a she!
+    ld a, 2
+    ld [wBobQuestState], a
+    ld [wHasDress], a
+    ld a, [wHeroMaxHP]
+    ld [wHeroHP], a ; Blessing of Amity full heal
+    ld a, 5 ; Page 5 = Bob Freed (She/Her)
+    ld [wDialogPage], a
+    call InitVictoryJingle
+    call DisableLCD
+    call LoadBobFemPortrait
+    call DrawNPCDialoguePage
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld [rLCDC], a
+    ret
+
 .startTerfBattleFromDialog:
     call StartBattleTransition
     ret
@@ -1239,6 +1397,252 @@ UpdateNPCDialogue:
 .closeDialog:
     ; Return to scrolling 2.5D Overworld Map
     call EnterOverworldMap
+    ret
+
+; ===========================================================================
+; Quest Giver NPC Bob & Hidden Dress Treasure Chest Interactions
+; ===========================================================================
+CheckBobInteraction:
+    ld a, [wPlayerWorldX]
+    ld b, a
+    ld a, [wBobWorldX]
+    sub b
+    jr nc, .absXOk
+    cpl
+    inc a
+.absXOk:
+    cp 20
+    ret nc
+
+    ld a, [wPlayerWorldY]
+    ld b, a
+    ld a, [wBobWorldY]
+    sub b
+    jr nc, .absYOk
+    cpl
+    inc a
+.absYOk:
+    cp 20
+    ret nc
+
+    cp 12
+    jr c, .touchCheckX
+    ld a, [wJoyPressed]
+    and PADF_A
+    ret z
+    jr .triggerBob
+
+.touchCheckX:
+    ld a, [wPlayerWorldX]
+    ld b, a
+    ld a, [wBobWorldX]
+    sub b
+    jr nc, .absX2
+    cpl
+    inc a
+.absX2:
+    cp 12
+    jr c, .pushBackBob
+    ld a, [wJoyPressed]
+    and PADF_A
+    ret z
+    jr .triggerBob
+
+.pushBackBob:
+    ld a, [wPlayerWorldY]
+    add 8
+    ld [wPlayerWorldY], a
+.triggerBob:
+    call PlaySFXConfirm
+    call DisableLCD
+    call ClearBGMap0
+    call ClearShadowOAM
+    xor a
+    ld [rSCX], a
+    ld [rSCY], a
+
+    ; Copy 20x8 PortraitTilemap into rows 0..7 of _SCRN0
+    ld de, PortraitTilemap
+    ld hl, _SCRN0
+    ld c, 8
+.bRowLoop:
+    ld b, 20
+    push hl
+.bColLoop:
+    ld a, [de]
+    inc de
+    ld [hl+], a
+    dec b
+    jr nz, .bColLoop
+    pop hl
+    push bc
+    ld bc, 32
+    add hl, bc
+    pop bc
+    dec c
+    jr nz, .bRowLoop
+
+    ld b, 0
+    ld c, 8
+    ld d, 20
+    ld e, 10
+    call DrawDialogBox
+
+    ; Choose Bob dialogue state & portrait:
+    ; - wBobQuestState == 2 -> Page 5 (Freed feminine Bob portrait)
+    ; - wHasDress == 1      -> Page 4 (Bearded Bob receiving the dress -> transforms to Page 5!)
+    ; - Otherwise           -> Page 3 (Bearded Bob asking for the dress in the chest)
+    ld a, [wBobQuestState]
+    cp 2
+    jr z, .bobAlreadyFreed
+    ld a, [wHasDress]
+    cp 1
+    jr z, .bobGiveDress
+
+    ld a, 3
+    ld [wDialogPage], a
+    call LoadBobBeardedPortrait
+    jr .finishBobInit
+
+.bobGiveDress:
+    ld a, 4
+    ld [wDialogPage], a
+    call LoadBobBeardedPortrait
+    jr .finishBobInit
+
+.bobAlreadyFreed:
+    ld a, 5
+    ld [wDialogPage], a
+    call LoadBobFemPortrait
+
+.finishBobInit:
+    call DrawNPCDialoguePage
+    ld a, STATE_DIALOGUE
+    ld [wGameState], a
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld [rLCDC], a
+    ret
+
+; Load Bearded Bob's dedicated 80-tile portrait (PortraitBobBeardedTiles) into VRAM $8800
+LoadBobBeardedPortrait:
+    ld hl, PortraitBobBeardedTiles
+    ld de, $8800
+    ld bc, 80 * 16
+    call CopyData
+    ret
+
+; Load Freed Feminine Bob's dedicated 80-tile portrait (PortraitBobFemTiles) into VRAM $8800
+LoadBobFemPortrait:
+    ld hl, PortraitBobFemTiles
+    ld de, $8800
+    ld bc, 80 * 16
+    call CopyData
+    ret
+
+; Check proximity to the Hidden Treasure Chest at Row 13, Col 10 (World X=160, Y=208)
+CheckChestInteraction:
+    ld a, [wPlayerWorldX]
+    sub 160
+    jr nc, .absXOk
+    cpl
+    inc a
+.absXOk:
+    cp 20
+    ret nc
+
+    ld a, [wPlayerWorldY]
+    sub 208
+    jr nc, .absYOk
+    cpl
+    inc a
+.absYOk:
+    cp 20
+    ret nc
+
+    ; Within 20px of Treasure Chest (160, 208)! Open on A press, or auto-open on close touch if closed
+    ld a, [wJoyPressed]
+    and PADF_A
+    jr nz, .openChestDialog
+
+    ; Also allow touching the closed chest directly (< 16px) to discover the dress immediately!
+    ld a, [wHasDress]
+    or a
+    ret nz
+    ld a, [wPlayerWorldX]
+    sub 160
+    jr nc, .tX
+    cpl
+    inc a
+.tX:
+    cp 16
+    ret nc
+    ld a, [wPlayerWorldY]
+    sub 208
+    jr nc, .tY
+    cpl
+    inc a
+.tY:
+    cp 18
+    ret nc
+
+.openChestDialog:
+    call DisableLCD
+    call ClearBGMap0
+    call ClearShadowOAM
+    xor a
+    ld [rSCX], a
+    ld [rSCY], a
+
+    ; Copy 20x8 PortraitTilemap into rows 0..7 of _SCRN0
+    ld de, PortraitTilemap
+    ld hl, _SCRN0
+    ld c, 8
+.cRowLoop:
+    ld b, 20
+    push hl
+.cColLoop:
+    ld a, [de]
+    inc de
+    ld [hl+], a
+    dec b
+    jr nz, .cColLoop
+    pop hl
+    push bc
+    ld bc, 32
+    add hl, bc
+    pop bc
+    dec c
+    jr nz, .cRowLoop
+
+    ld b, 0
+    ld c, 8
+    ld d, 20
+    ld e, 10
+    call DrawDialogBox
+
+    call LoadPlayerPortraitTiles
+
+    ld a, [wHasDress]
+    or a
+    jr nz, .alreadyOpened
+    ld a, 1
+    ld [wHasDress], a
+    ld a, 6 ; Page 6 = Found the Silk Dress!
+    ld [wDialogPage], a
+    call InitVictoryJingle
+    jr .showChestPage
+
+.alreadyOpened:
+    call PlaySFXConfirm
+    ld a, 7 ; Page 7 = Chest is empty
+    ld [wDialogPage], a
+
+.showChestPage:
+    call DrawNPCDialoguePage
+    ld a, STATE_DIALOGUE
+    ld [wGameState], a
+    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld [rLCDC], a
     ret
 
 ; Show Boss TERF 80x64 Portrait & Taunt Dialogue before starting Boss Battle!
@@ -2200,7 +2604,7 @@ RenderOverworldSprites:
     ld a, [wNPCWorldY]
     sub c
     cp 144
-    jr nc, .renderEnemies
+    jr nc, .renderBob
     add 16
     ld [wSpriteY], a
 
@@ -2209,7 +2613,7 @@ RenderOverworldSprites:
     ld a, [wNPCWorldX]
     sub c
     cp 160
-    jr nc, .renderEnemies
+    jr nc, .renderBob
     add 8
     ld [wSpriteX], a
 
@@ -2218,11 +2622,36 @@ RenderOverworldSprites:
     ld a, 4
     call SetMetaSprite16x16
 
+.renderBob:
+    ; Render Quest Giver NPC Bob (OAM 8..11) at Tile $F0 if within camera viewport
+    ld a, [wCameraY]
+    ld c, a
+    ld a, [wBobWorldY]
+    sub c
+    cp 144
+    jr nc, .renderEnemies
+    add 16
+    ld [wSpriteY], a
+
+    ld a, [wCameraX]
+    ld c, a
+    ld a, [wBobWorldX]
+    sub c
+    cp 160
+    jr nc, .renderEnemies
+    add 8
+    ld [wSpriteX], a
+
+    ld a, $F0 ; NPC Bob Overworld tile ($F0..$F3: Bearded before quest, Dress after quest!)
+    ld [wSpriteTile], a
+    ld a, 8
+    call SetMetaSprite16x16
+
 .renderEnemies:
-    ; Render up to 8 visible Enemies into OAM slots 8..39 (4 OAM entries per 16x16 enemy)
+    ; Render up to 7 visible Enemies into OAM slots 12..39 (4 OAM entries per 16x16 enemy)
     ; Index 0 = EVIL TERF ($F4), Indices 1..8 = 8 SHADOW FIENDS ($FC)
-    ld c, 0 ; Enemy index 0..8
-    ld b, 8 ; Next OAM slot (8, 12, 16, 20, 24, 28, 32, 36)
+    ld c, 0  ; Enemy index 0..8
+    ld b, 12 ; Next OAM slot (12, 16, 20, 24, 28, 32, 36)
 .enemyLoop:
     push bc
     ld d, 0
@@ -2311,7 +2740,7 @@ OverworldMapData:
     db 2,0,0,0, 2,0,0,1, 1,0,0,2, 0,0,0,2 ; Row 10: Forest Clearing
     db 2,4,4,4, 4,4,0,1, 1,0,4,4, 4,4,4,2 ; Row 11: River & Stone Bridge
     db 2,4,4,4, 4,4,0,1, 1,0,4,4, 4,4,4,2 ; Row 12: River & Stone Bridge
-    db 2,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,2 ; Row 13: South Bank
+    db 2,0,0,0, 0,0,0,1, 1,0,6,0, 0,0,0,2 ; Row 13: South Bank (6 = Treasure Chest with Dress at Col 10!)
     db 2,2,0,2, 0,0,1,1, 1,1,0,0, 2,0,2,2 ; Row 14: Southern Woods
     db 2,2,2,2, 2,2,2,2, 2,2,2,2, 2,2,2,2 ; Row 15: Southern Border Trees
 
@@ -3462,6 +3891,59 @@ StrTerfDialogL3:
 StrTerfDialogL4:
     db "WHAT YOU ARE!", $2F, $09, 0
 
+StrHeaderBobBeard:
+    db $09, "BOB (BEARDED)", $09, 0
+StrBobReqL1:
+    db $2F, "THE WEAVE BINDS", 0
+StrBobReqL2:
+    db "ME AS A MAN...", 0
+StrBobReqL3:
+    db "I LONG TO TRY ON", 0
+StrBobReqL4:
+    db "THE SILK DRESS", 0
+StrBobReqL5:
+    db "IN THE CHEST", 0
+StrBobReqL6:
+    db "PAST THE BRIDGE!", $2F, 0
+
+StrBobTryL1:
+    db $2F, "YOU BROUGHT THE", 0
+StrBobTryL2:
+    db "SILK DRESS!", 0
+StrBobTryL3:
+    db "LET ME TRY IT", 0
+StrBobTryL4:
+    db "ON RIGHT NOW...", $2F, 0
+
+StrHeaderBobFem:
+    db $09, "BOB (SHE/HER)", $09, 0
+StrBobFreeL1:
+    db $2F, "THE WEAVE'S HOLD", 0
+StrBobFreeL2:
+    db "IS BROKEN!", 0
+StrBobFreeL3:
+    db "I AM FINALLY A", 0
+StrBobFreeL4:
+    db "WOMAN! FREE AT", 0
+StrBobFreeL5:
+    db "LAST! THANK YOU!", $2F, 0
+
+StrHeaderChest:
+    db "* TREASURE CHEST *", 0
+StrChestFoundL1:
+    db "YOU OPENED THE", 0
+StrChestFoundL2:
+    db "WOODEN CHEST!", 0
+StrChestFoundL3:
+    db "FOUND THE LOVELY", 0
+StrChestFoundL4:
+    db $2F, "SILK DRESS", $2F, "!", 0
+
+StrChestEmptyL1:
+    db "THE TREASURE", 0
+StrChestEmptyL2:
+    db "CHEST IS EMPTY.", 0
+
 StrEnemyName:
     db "* SHADOW FIEND *", 0
 StrTerfName:
@@ -3534,6 +4016,10 @@ wCameraX:       ds 1
 wCameraY:       ds 1
 wNPCWorldX:     ds 1
 wNPCWorldY:     ds 1
+wBobWorldX:     ds 1
+wBobWorldY:     ds 1
+wBobQuestState: ds 1 ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
+wHasDress:      ds 1 ; 0 = Dress in chest, 1 = Found in chest, 2 = Given to Bob
 wEnemyX:        ds 9 ; 0 = Evil Terf, 1..8 = 8 Shadow Fiends
 wEnemyY:        ds 9
 wEnemyAlive:    ds 9

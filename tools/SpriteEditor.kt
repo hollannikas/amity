@@ -651,11 +651,14 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             SpriteGroupItem("Sakura Portrait (80x64, 10x8 tiles)", "PortraitSakuraTiles", 0, 10, 8, false),
             SpriteGroupItem("Orion Portrait (80x64, 10x8 tiles)", "PortraitOrionTiles", 0, 10, 8, false),
             SpriteGroupItem("Gaius Portrait (80x64, 10x8 tiles)", "PortraitGaiusTiles", 0, 10, 8, false),
-            SpriteGroupItem("Boss Terf Portrait (80x64, 10x8 tiles)", "PortraitTerfTiles", 0, 10, 8, false)
+            SpriteGroupItem("Boss Terf Portrait (80x64, 10x8 tiles)", "PortraitTerfTiles", 0, 10, 8, false),
+            SpriteGroupItem("Bob (Bearded) Portrait (80x64, 10x8 tiles)", "PortraitBobBeardedTiles", 0, 10, 8, false),
+            SpriteGroupItem("Bob (She/Her) Portrait (80x64, 10x8 tiles)", "PortraitBobFemTiles", 0, 10, 8, false)
         )
         val builtInPortraits = setOf(
             "PortraitAriaTiles", "PortraitSakuraTiles", "PortraitOrionTiles",
-            "PortraitGaiusTiles", "PortraitMateriaTiles", "PortraitTerfTiles"
+            "PortraitGaiusTiles", "PortraitMateriaTiles", "PortraitTerfTiles",
+            "PortraitBobBeardedTiles", "PortraitBobFemTiles"
         )
         for ((secName, list) in doc.sectionTiles) {
             if (secName.startsWith("Portrait") && secName !in builtInPortraits && list.size >= 80) {
