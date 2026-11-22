@@ -591,7 +591,11 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             npcEnemyItems.add(SpriteGroupItem("$rawCmt (Custom #$i, 16x16)", "CustomSpritesTiles", i * 4, 2, 2, true))
         }
         // Also scan any user-created Sprite*Tiles sections!
-        val builtInSpriteSecs = setOf("SpritesAriaTiles", "SpritesSakuraTiles", "SpritesOrionTiles", "SpritesRuusuTiles", "SpritesMaraTiles", "CustomSpritesTiles", "SelectScreenHeroSprites")
+        val builtInSpriteSecs = setOf(
+            "SpritesAriaTiles", "SpritesSakuraTiles", "SpritesOrionTiles",
+            "SpritesRuusuTiles", "SpritesMaraFTiles", "SpritesMaraMTiles",
+            "CustomSpritesTiles", "SelectScreenHeroSprites"
+        )
         for ((secName, list) in doc.sectionTiles) {
             if (secName.startsWith("Sprite") && secName !in builtInSpriteSecs && list.size >= 4) {
                 val count = list.size / 4
@@ -715,7 +719,8 @@ class SpriteEditorFrame(private val doc: AssetsIncDocument) : JFrame("Threads of
             CategoryDef("Hero Sprites: F - SAKURA (16x16)", charSpritesForSection("Sakura", "SpritesSakuraTiles")),
             CategoryDef("Hero Sprites: NB - ORION (16x16)", charSpritesForSection("Orion", "SpritesOrionTiles")),
             CategoryDef("Hero Sprites: NB - RUUSU (16x16)", charSpritesForSection("Ruusu", "SpritesRuusuTiles")),
-            CategoryDef("Hero Sprites: GF - MARA (16x16)", charSpritesForSection("Mara", "SpritesMaraTiles")),
+            CategoryDef("Hero Sprites: GF - MARA F (16x16)", charSpritesForSection("MaraF", "SpritesMaraFTiles")),
+            CategoryDef("Hero Sprites: GF - MARA M (16x16)", charSpritesForSection("MaraM", "SpritesMaraMTiles")),
             CategoryDef("Overworld NPC, Enemy & Custom Sprites (16x16)", npcEnemyItems),
             CategoryDef("Inventory Item Sprites (16x16)", itemSpriteItems),
             CategoryDef("2.5D Overworld Map Metatiles (16x16)", mapMetatileItems),

@@ -17,6 +17,7 @@ DEF STATE_INVENTORY   EQU 6
 ; Inventory Item IDs & Grid Constants
 DEF ITEM_NONE         EQU 0
 DEF ITEM_SILK_DRESS   EQU 1
+DEF ITEM_BINDER       EQU 2
 DEF INV_SLOTS         EQU 8 ; 4 columns x 2 rows grid of 16x16 items
 
 ; Character Classes / Genders
@@ -453,7 +454,7 @@ HeroSpriteBankTable:
     dw SpritesSakuraTiles
     dw SpritesOrionTiles
     dw SpritesRuusuTiles
-    dw SpritesMaraTiles
+    dw SpritesMaraFTiles
 
 HeroOptionStrTable:
     dw StrOptMale
@@ -806,6 +807,7 @@ InitOverworld:
     xor a
     ld [wBobQuestState], a ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
     ld [wHasDress], a      ; 0 = Dress in chest, 1 = In inventory, 2 = Given to Bob
+    ld [wBinderEquipped], a ; 0 = MaraF sprite set, 1 = MaraM sprite set
     ld [wInvCursor], a
     ld hl, wInventory
     ld b, INV_SLOTS
@@ -813,6 +815,14 @@ InitOverworld:
     ld [hl+], a
     dec b
     jr nz, .clearInvLoop
+
+    ; If playing as GF: MARA, start with the Binder in inventory!
+    ld a, [wSelectedChar]
+    cp CHAR_MARA
+    jr nz, .doneStartItems
+    ld a, ITEM_BINDER
+    call AddItemToInventory
+.doneStartItems:
 
     ; Initialize 9 Overworld Enemies:
     ; Index 0 = EVIL TERF (slow, high-HP, high-ATK boss mob at X=64, Y=144)
@@ -920,7 +930,12 @@ LoadSelectedPlayerSprites:
     ld hl, SpritesRuusuTiles
     jr .copySpr
 .loadSprMara:
-    ld hl, SpritesMaraTiles
+    ; Switch Mara between SpritesMaraFTiles (0) and SpritesMaraMTiles (1) based on wBinderEquipped!
+    ld a, [wBinderEquipped]
+    or a
+    ld hl, SpritesMaraFTiles
+    jr z, .copySpr
+    ld hl, SpritesMaraMTiles
     jr .copySpr
 .loadSprAria:
     ld hl, SpritesAriaTiles
@@ -2048,11 +2063,40 @@ UpdateInventory:
     bit 6, a ; PADF_UP
     jr nz, .moveUpDown
 
-    ; Close Inventory on B, A, START, or SELECT (no item action button yet)
-    and PADF_B | PADF_A | PADF_START | PADF_SELECT
+    ; Action button (A): Use / Equip selected item (e.g. Binder toggles MaraF <-> MaraM!)
+    bit 0, a ; PADF_A
+    jr nz, .useSelectedItem
+
+    ; Close Inventory on B, START, or SELECT
+    and PADF_B | PADF_START | PADF_SELECT
     ret z
+.closeInventory:
     call PlaySFXConfirm
     call EnterOverworldMap
+    ret
+
+.useSelectedItem:
+    ld a, [wInvCursor]
+    ld c, a
+    ld b, 0
+    ld hl, wInventory
+    add hl, bc
+    ld a, [hl]
+    or a
+    jr z, .closeInventory ; Pressing A on an empty slot closes the inventory
+    cp ITEM_BINDER
+    jr z, .toggleBinder
+    ; Non-equippable quest item (e.g. Silk Dress): play cursor feedback
+    call PlaySFXCursor
+    ret
+
+.toggleBinder:
+    ld a, [wBinderEquipped]
+    xor 1
+    ld [wBinderEquipped], a
+    call PlaySFXLevelUp
+    call WaitVBlank
+    call DrawSelectedItemName
     ret
 
 .moveRight:
@@ -2251,6 +2295,8 @@ DrawSelectedItemName:
     ld a, [hl]
     cp ITEM_SILK_DRESS
     jr z, .nameSilkDress
+    cp ITEM_BINDER
+    jr z, .nameBinder
 
     ; Empty slot
     ld hl, _SCRN0 + (16 * 32) + 5
@@ -2261,6 +2307,17 @@ DrawSelectedItemName:
 .nameSilkDress:
     ld hl, _SCRN0 + (16 * 32) + 5
     ld de, StrItemSilkDress
+    call PrintString
+    ret
+
+.nameBinder:
+    ld hl, _SCRN0 + (16 * 32) + 3
+    ld a, [wBinderEquipped]
+    or a
+    ld de, StrItemBinderF
+    jr z, .printBinder
+    ld de, StrItemBinderM
+.printBinder:
     call PrintString
     ret
 
@@ -4621,6 +4678,10 @@ StrItemEmpty:
     db "- EMPTY -", 0
 StrItemSilkDress:
     db "SILK DRESS", 0
+StrItemBinderF:
+    db "BINDER: MARA F", 0
+StrItemBinderM:
+    db "BINDER: MARA M", 0
 
 StrEnemyName:
     db "* SHADOW FIEND *", 0
@@ -4697,9 +4758,10 @@ wNPCWorldX:     ds 1
 wNPCWorldY:     ds 1
 wBobWorldX:     ds 1
 wBobWorldY:     ds 1
-wBobQuestState: ds 1 ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
-wHasDress:      ds 1 ; 0 = Dress in chest, 1 = Found in chest, 2 = Given to Bob
-wInvCursor:     ds 1 ; Selected inventory grid slot (0..7)
+wBobQuestState:  ds 1 ; 0 = Bearded man waiting for dress, 2 = Freed woman in dress!
+wHasDress:       ds 1 ; 0 = Dress in chest, 1 = Found in chest, 2 = Given to Bob
+wBinderEquipped: ds 1 ; 0 = MaraF sprite set, 1 = MaraM sprite set
+wInvCursor:      ds 1 ; Selected inventory grid slot (0..7)
 wInventory:     ds INV_SLOTS ; 8 inventory slots (0 = empty, 1 = Silk Dress, etc.)
 wEnemyX:        ds 9 ; 0 = Evil Terf, 1..8 = 8 Shadow Fiends
 wEnemyY:        ds 9
