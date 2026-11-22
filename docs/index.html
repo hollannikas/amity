@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Threads of Amity — Game Boy RPG</title>
+  <style>
+    :root {
+      --bg-dark: #141812;
+      --bg-panel: #1f261c;
+      --border-dmg: #475938;
+      --accent-dmg: #8bac0f;
+      --accent-soft: #9bbc0f;
+      --text-main: #e2ecd9;
+      --text-muted: #a6b899;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      padding: 1.5rem 1rem;
+      gap: 1.5rem;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: clamp(1.35rem, 1rem + 1.5vw, 2.25rem);
+      color: var(--accent-soft);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: clamp(0.85rem, 0.8rem + 0.25vw, 1rem);
+    }
+
+    main {
+      width: 100%;
+      max-width: 42rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .screen-frame {
+      width: 100%;
+      max-width: 32rem;
+      aspect-ratio: 10 / 9;
+      background-color: #0f380f;
+      border: 4px solid var(--border-dmg);
+      border-radius: 0.75rem;
+      overflow: hidden;
+      box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.55);
+    }
+
+    #game {
+      width: 100%;
+      height: 100%;
+    }
+
+    .controls-card {
+      width: 100%;
+      max-width: 32rem;
+      background-color: var(--bg-panel);
+      border: 2px solid var(--border-dmg);
+      border-radius: 0.625rem;
+      padding: 1rem 1.25rem;
+    }
+
+    .controls-card h2 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(0.95rem, 0.85rem + 0.4vw, 1.15rem);
+      color: var(--accent-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: minmax(7rem, auto) 1fr;
+      gap: 0.45rem 1rem;
+      font-size: 0.9rem;
+    }
+
+    dt {
+      font-weight: 700;
+      color: var(--accent-dmg);
+    }
+
+    dd {
+      margin: 0;
+      color: var(--text-main);
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Threads of Amity</h1>
+    <p>Original 8-bit DMG Game Boy RPG built with RGBDS SM83 assembly</p>
+  </header>
+
+  <main>
+    <div class="screen-frame" aria-label="Game Boy Emulator">
+      <div id="game"></div>
+    </div>
+
+    <section class="controls-card" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">Default Controls</h2>
+      <dl>
+        <dt>D-Pad</dt>
+        <dd>Arrow Keys — Move / Navigate menus</dd>
+        <dt>A Button</dt>
+        <dd>Z or X (configurable in toolbar) — Talk / Confirm / Equip</dd>
+        <dt>B Button</dt>
+        <dd>X or Z — Cancel / Close Inventory / Run</dd>
+        <dt>Start</dt>
+        <dd>Enter — Start game / Trigger encounter</dd>
+        <dt>Select</dt>
+        <dd>Right Shift — Open / Close 4×2 Inventory</dd>
+      </dl>
+    </section>
+  </main>
+
+  <footer>
+    <p>Powered by EmulatorJS &middot; Compiled from source via GitHub Actions</p>
+  </footer>
+
+  <script>
+    window.EJS_player = "#game";
+    window.EJS_core = "gb";
+    window.EJS_gameName = "Threads of Amity";
+    window.EJS_color = "#8bac0f";
+    window.EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
+    window.EJS_gameUrl = "threads_of_amity.gb";
+  </script>
+  <script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
+</body>
+</html>
