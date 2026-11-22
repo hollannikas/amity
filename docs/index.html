@@ -13,6 +13,9 @@
       --accent-soft: #9bbc0f;
       --text-main: #e2ecd9;
       --text-muted: #a6b899;
+      --warn-bg: #3b2314;
+      --warn-border: #c97a3e;
+      --warn-text: #ffd9b8;
     }
 
     * {
@@ -58,6 +61,22 @@
       flex-direction: column;
       align-items: center;
       gap: 1.5rem;
+    }
+
+    .status-banner {
+      width: 100%;
+      max-width: 32rem;
+      background-color: var(--warn-bg);
+      border: 2px solid var(--warn-border);
+      color: var(--warn-text);
+      border-radius: 0.625rem;
+      padding: 0.85rem 1rem;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .status-banner[hidden] {
+      display: none;
     }
 
     .screen-frame {
@@ -125,6 +144,8 @@
   </header>
 
   <main>
+    <div id="rom-status" class="status-banner" role="status" hidden></div>
+
     <div class="screen-frame" aria-label="Game Boy Emulator">
       <div id="game"></div>
     </div>
@@ -151,12 +172,48 @@
   </footer>
 
   <script>
+    // Guard Screen Wake Lock API so Safari/WebKit doesn't throw an unhandled
+    // NotAllowedError promise rejection when EmulatorJS requests wakeLock
+    // outside a direct user gesture.
+    if (navigator.wakeLock && typeof navigator.wakeLock.request === "function") {
+      const originalWakeLockRequest = navigator.wakeLock.request.bind(navigator.wakeLock);
+      navigator.wakeLock.request = function (type) {
+        try {
+          return Promise.resolve(originalWakeLockRequest(type)).catch(function () {
+            return null;
+          });
+        } catch (_err) {
+          return Promise.resolve(null);
+        }
+      };
+    }
+
     window.EJS_player = "#game";
     window.EJS_core = "gb";
     window.EJS_gameName = "Threads of Amity";
     window.EJS_color = "#8bac0f";
+    window.EJS_startOnLoaded = false;
     window.EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
     window.EJS_gameUrl = "threads_of_amity.gb";
+
+    // Verify that the compiled ROM is reachable on the current host.
+    fetch("threads_of_amity.gb", { method: "HEAD" })
+      .then(function (response) {
+        if (!response.ok) {
+          const banner = document.getElementById("rom-status");
+          banner.textContent =
+            "ROM file (threads_of_amity.gb) returned HTTP " +
+            response.status +
+            ". In GitHub repo Settings → Pages → Build and deployment, ensure Source is set to 'GitHub Actions' (not 'Deploy from a branch').";
+          banner.hidden = false;
+        }
+      })
+      .catch(function () {
+        const banner = document.getElementById("rom-status");
+        banner.textContent =
+          "Could not fetch threads_of_amity.gb. If testing locally, run 'make' and serve the docs/ folder over a local HTTP server (e.g. 'python3 -m http.server -d docs').";
+        banner.hidden = false;
+      });
   </script>
   <script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
 </body>

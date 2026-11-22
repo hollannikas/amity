@@ -31,6 +31,7 @@ $(ROM): $(OBJS)
 	$(LD) -m $(PROJECT).map -n $(PROJECT).sym -o $@ $(OBJS)
 	$(FIX) -v -p 0x00 -t "THREADSAMITY" $@
 	cp $@ aretha2_demo.gb
+	cp $@ docs/$@
 
 clean:
-	rm -f $(OBJS) $(ROM) $(PROJECT).map $(PROJECT).sym aretha2_demo.gb aretha2_demo.map aretha2_demo.sym
+	rm -f $(OBJS) $(ROM) docs/$(ROM) $(PROJECT).map $(PROJECT).sym aretha2_demo.gb aretha2_demo.map aretha2_demo.sym

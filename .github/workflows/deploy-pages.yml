@@ -33,7 +33,7 @@ jobs:
       - name: Build Game Boy ROM
         run: |
           make
-          cp threads_of_amity.gb docs/threads_of_amity.gb
+          ls -lh docs/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
