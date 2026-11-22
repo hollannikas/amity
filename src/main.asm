@@ -899,8 +899,21 @@ EnterOverworldMap:
     ld bc, MapMetatilesDataEnd - MapMetatilesData
     call CopyData
 
+    ; Reuse the 8 Rounded-Edge Border Tiles from InvGridBorderTiles at VRAM $8A00 (Tiles $A0..$A7)
+    ld hl, InvGridBorderTiles
+    ld de, $8A00
+    ld bc, 8 * 16
+    call CopyData
+
     ; Render 16x16 Metatile Map (256x256px) into _SCRN0 ($9800)
     call LoadOverworldMap
+
+    ; Render 4-Row Rounded-Border Bottom Overworld HUD into Window Layer _SCRN1 ($9C00) at WY=112, WX=7
+    call DrawOverworldHUD
+    ld a, 7
+    ld [rWX], a
+    ld a, 112 ; Bottom 4 rows of 144px screen (scanlines 112..143: 2 border rows + 2 HUD rows)
+    ld [rWY], a
 
     ; Update Camera Scroll registers (rSCX, rSCY) from Player position
     call UpdateCameraScroll
@@ -909,8 +922,206 @@ EnterOverworldMap:
     ld a, STATE_OVERWORLD
     ld [wGameState], a
 
-    ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
+    ld a, LCDCF_ON | LCDCF_WIN9C00 | LCDCF_WINON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJON | LCDCF_BGON
     ld [rLCDC], a
+    ret
+
+; ===========================================================================
+; Overworld 4-Row Rounded-Border Bottom HUD (Window Layer _SCRN1 at $9C00, WY=112)
+; Reuses InvGridBorderTiles loaded at $A0..$A7 (TL=$A0, T=$A1, TR=$A2, L=$A3, R=$A4, BL=$A5, B=$A6, BR=$A7)
+; Row 0: ╭──────────────────╮
+; Row 1: │♥HP:[████████]34/34 │
+; Row 2: │★XP:[████░░░░]50%L01│
+; Row 3: ╰──────────────────╯
+; ===========================================================================
+DrawOverworldHUD:
+    ; Clear first 4 rows (128 bytes) of _SCRN1 ($9C00..$9C7F) to Blank ($00)
+    ld hl, _SCRN1
+    ld b, 128
+    xor a
+.clearWin:
+    ld [hl+], a
+    dec b
+    jr nz, .clearWin
+
+    ; --- Row 0: Top Rounded Border ($A0, 18 x $A1, $A2) ---
+    ld hl, _SCRN1
+    ld a, $A0 ; Rounded TL
+    ld [hl+], a
+    ld b, 18
+    ld a, $A1 ; Rounded T
+.topLoop:
+    ld [hl+], a
+    dec b
+    jr nz, .topLoop
+    ld a, $A2 ; Rounded TR
+    ld [hl], a
+
+    ; --- Row 3: Bottom Rounded Border ($A5, 18 x $A6, $A7) ---
+    ld hl, _SCRN1 + (3 * 32)
+    ld a, $A5 ; Rounded BL
+    ld [hl+], a
+    ld b, 18
+    ld a, $A6 ; Rounded B
+.botLoop:
+    ld [hl+], a
+    dec b
+    jr nz, .botLoop
+    ld a, $A7 ; Rounded BR
+    ld [hl], a
+
+    ; Left & Right Rounded Borders on Rows 1 and 2 ($A3 and $A4)
+    ld a, $A3 ; Rounded L
+    ld [_SCRN1 + (1 * 32) + 0], a
+    ld [_SCRN1 + (2 * 32) + 0], a
+    ld a, $A4 ; Rounded R
+    ld [_SCRN1 + (1 * 32) + 19], a
+    ld [_SCRN1 + (2 * 32) + 19], a
+
+    ; --- Row 1 (Cols 1..18): ♥HP: + 8-Tile HP Bar (Cols 5..12) + Current/Max HP (Cols 13..17) ---
+    ld hl, _SCRN1 + (1 * 32) + 1
+    ld a, $0C ; Heart icon ♥
+    ld [hl+], a
+    ld de, StrHPLabel ; "HP:"
+    call PrintString
+
+    ; Compute HP Bar sub-steps (0..32) = (wHeroHP * 32) / wHeroMaxHP
+    ld a, [wHeroHP]
+    or a
+    jr z, .gotHPSteps
+    ld b, a
+    ld a, [wHeroMaxHP]
+    cp b
+    jr c, .fullHPBar
+    jr z, .fullHPBar
+
+    ; HL = wHeroHP * 32
+    ld l, b
+    ld h, 0
+    add hl, hl ; *2
+    add hl, hl ; *4
+    add hl, hl ; *8
+    add hl, hl ; *16
+    add hl, hl ; *32
+    ld a, [wHeroMaxHP]
+    ld e, a
+    ld d, 0
+    ld c, 0 ; Quotient (0..32)
+.divHPLoop:
+    ld a, h
+    or a
+    jr nz, .subHP
+    ld a, l
+    cp e
+    jr c, .doneHPDiv
+.subHP:
+    ld a, l
+    sub e
+    ld l, a
+    ld a, h
+    sbc d
+    ld h, a
+    inc c
+    jr .divHPLoop
+.doneHPDiv:
+    ld a, c
+    or a
+    jr nz, .gotHPSteps
+    ld a, 1 ; At least 1 sub-step if HP > 0
+    jr .gotHPSteps
+.fullHPBar:
+    ld a, 32
+.gotHPSteps:
+    ld hl, _SCRN1 + (1 * 32) + 5
+    call DrawHudBar8Tiles
+
+    ; Print CurrentHP/MaxHP at Cols 13..17
+    ld a, [wHeroHP]
+    ld hl, _SCRN1 + (1 * 32) + 13
+    call PrintNumber2Digit
+    ld a, $3F ; '/'
+    ld [_SCRN1 + (1 * 32) + 15], a
+    ld a, [wHeroMaxHP]
+    ld hl, _SCRN1 + (1 * 32) + 16
+    call PrintNumber2Digit
+
+    ; --- Row 2 (Cols 1..18): ★XP: + 8-Tile XP Percentage Bar (Cols 5..12) + XX%L01 (Cols 13..18) ---
+    ld hl, _SCRN1 + (2 * 32) + 1
+    ld a, $0D ; Star icon ★
+    ld [hl+], a
+    ld de, StrXPLabel ; "XP:"
+    call PrintString
+
+    ; Compute XP Percentage (0..99%) towards wHeroNextXP (20 XP per level -> 1 XP = 5%)
+    ; and XP Bar sub-steps (0..32) = (wHeroXP * 32) / 20 = (wHeroXP * 8) / 5
+    ld a, [wHeroXP]
+    cp 20
+    jr c, .calcXPBar
+    ld a, 20
+.calcXPBar:
+    add a
+    add a
+    add a
+    ld c, 0 ; Quotient = (wHeroXP * 8) / 5 (0..32)
+.divXPLoop:
+    cp 5
+    jr c, .gotXPSteps
+    sub 5
+    inc c
+    jr .divXPLoop
+.gotXPSteps:
+    ld a, c
+    ld hl, _SCRN1 + (2 * 32) + 5
+    call DrawHudBar8Tiles
+
+    ; Compute XP Percentage = wHeroXP * 5 (0..99) and print at Cols 13..15 ("00%")
+    ld a, [wHeroXP]
+    ld b, a
+    add a ; *2
+    add a ; *4
+    add b ; *5
+    cp 100
+    jr c, .printXPPct
+    ld a, 99
+.printXPPct:
+    ld hl, _SCRN1 + (2 * 32) + 13
+    call PrintNumber2Digit
+    ld a, $35 ; '%'
+    ld [_SCRN1 + (2 * 32) + 15], a
+
+    ; Print Level "L01" at Cols 16..18
+    ld a, $5C ; 'L'
+    ld [_SCRN1 + (2 * 32) + 16], a
+    ld a, [wHeroLevel]
+    ld hl, _SCRN1 + (2 * 32) + 17
+    call PrintNumber2Digit
+    ret
+
+; Draw an 8-tile smooth progress bar at VRAM HL given A = filled sub-steps (0..32)
+; Uses Tiles $6B (0/4), $6C (1/4), $6D (2/4), $6E (3/4), $6F (4/4)
+DrawHudBar8Tiles:
+    ld c, a
+    ld b, 8
+.barLoop:
+    ld a, c
+    or a
+    jr z, .emptySeg
+    cp 4
+    jr nc, .fullSeg
+    add $6B
+    ld c, 0
+    jr .writeSeg
+.fullSeg:
+    sub 4
+    ld c, a
+    ld a, $6F
+    jr .writeSeg
+.emptySeg:
+    ld a, $6B
+.writeSeg:
+    ld [hl+], a
+    dec b
+    jr nz, .barLoop
     ret
 
 ; Copy 32 tiles (512 bytes) of 4-directional walking sprites for wSelectedChar into VRAM $8D00 ($D0..$EF)
@@ -3221,16 +3432,16 @@ UpdateCameraScroll:
     ld [wCameraX], a
     ld [rSCX], a
 
-    ; Camera Y = clamp(PlayerWorldY - 64, 0, 112)
+    ; Camera Y = clamp(PlayerWorldY - 48, 0, 144) for 112px viewport above the 4-row rounded-border bottom HUD
     ld a, [wPlayerWorldY]
-    sub 64
+    sub 48
     jr nc, .checkMaxY
     xor a
     jr .setCamY
 .checkMaxY:
-    cp 112
+    cp 144
     jr c, .setCamY
-    ld a, 112
+    ld a, 144
 .setCamY:
     ld [wCameraY], a
     ld [rSCY], a
@@ -3284,12 +3495,12 @@ RenderOverworldSprites:
     xor a ; OAM 0..3
     call SetMetaSprite16x16
 
-    ; Render NPC Gaius (OAM 4..7) at Tile $F8 if within camera viewport
+    ; Render NPC Gaius (OAM 4..7) at Tile $F8 if within camera viewport above HUD (< 100)
     ld a, [wCameraY]
     ld c, a
     ld a, [wNPCWorldY]
     sub c
-    cp 144
+    cp 100
     jr nc, .renderBob
     add 16
     ld [wSpriteY], a
@@ -3309,12 +3520,12 @@ RenderOverworldSprites:
     call SetMetaSprite16x16
 
 .renderBob:
-    ; Render Quest Giver NPC Bob (OAM 8..11) at Tile $F0 if within camera viewport
+    ; Render Quest Giver NPC Bob (OAM 8..11) at Tile $F0 if within camera viewport above HUD (< 100)
     ld a, [wCameraY]
     ld c, a
     ld a, [wBobWorldY]
     sub c
-    cp 144
+    cp 100
     jr nc, .renderEnemies
     add 16
     ld [wSpriteY], a
@@ -3350,14 +3561,14 @@ RenderOverworldSprites:
     or a
     jr z, .skipThisEnemy
 
-    ; Check Y within camera viewport (WorldY - CameraY < 144)
+    ; Check Y within camera viewport above 4-row bottom HUD (WorldY - CameraY < 100)
     ld hl, wEnemyY
     add hl, de
     ld a, [wCameraY]
     ld d, a
     ld a, [hl]
     sub d
-    cp 144
+    cp 100
     jr nc, .skipThisEnemy
     add 16
     ld [wSpriteY], a
